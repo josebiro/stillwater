@@ -1,0 +1,44 @@
+.venv/
+__pycache__/
+.probe/
+.dev/
+node_modules/
+dist/
+
+# Local test runs, meeting vaults, and downloaded fixtures
+.*-check-*/
+.probe-*/
+test-results/
+coverage/
+meetings/
+capture-spool/
+*.wav
+*.mp3
+*.flac
+*.webm
+*.pftrace
+*.log
+*.sqlite*
+*.jsonl
+enhancement-*.json
+transcript*.md
+enhanced.md
+tools/jfk-reference.txt
+
+# Credentials and local configuration
+.env
+.env.*
+*-api-key.bin
+*.pem
+*.key
+
+# Historical workspace records containing run evidence or machine-specific details
+/docs/bug-audit.md
+/docs/handoff.md
+/docs/implementation-plan.md
+/docs/meeting-outline-spec.md
+/docs/native-probe.md
+/docs/prd.md
+/docs/progress.md
+/docs/spec.md
+/docs/windows-package.md

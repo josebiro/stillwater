@@ -1,0 +1,30 @@
+{
+  "name": "stillwater",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "desktop/bootstrap.cjs",
+  "scripts": {
+    "start": "electron .",
+    "check:worker": "node desktop/check.ts",
+    "check:live-worker": "node desktop/check-live-worker.ts",
+    "check:vault": "node desktop/check-vault.ts",
+    "check:vault-ui": "electron . --check-vault-ui",
+    "check:spool": "node desktop/check-spool.ts",
+    "check:outline": "node desktop/check-outline.ts",
+    "check:hosted-settings": "electron desktop/check-hosted-settings.cjs",
+    "check:meeting-qa": "node desktop/check-meeting-qa.ts",
+    "check:calendar": "node desktop/check-calendar.ts",
+    "check:enhance": "node desktop/check-enhance.ts",
+    "check:desktop": "electron . --check-worker",
+    "check:capture": "electron . --check-capture",
+    "check:recovery": "electron . --check-recovery",
+    "check:import": "electron . --check-import"
+  },
+  "devDependencies": {
+    "electron": "45.3.0"
+  },
+  "dependencies": {
+    "markdown-it": "^14.3.3"
+  }
+}

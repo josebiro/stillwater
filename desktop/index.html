@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+  <title>Stillwater</title>
+  <link rel="stylesheet" href="workspace.css">
+  <script src="../node_modules/markdown-it/dist/markdown-it.min.js" defer></script>
+  <script src="renderer.js" defer></script>
+  <script src="capture.js" defer></script>
+</head>
+<body>
+  <main>
+    <header class="app-header">
+      <h1><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>Stillwater</h1>
+      <nav aria-label="Workspace">
+        <button id="go-home" type="button" aria-current="page">Home</button>
+        <button id="new-note" type="button">New note</button>
+      </nav>
+    <details id="speech-settings">
+      <summary>Settings</summary>
+      <div class="settings-panel">
+      <h2>Speech models</h2>
+      <p id="english-engine"></p>
+      <p>Multilingual recording, audio import, recovery, and refinement use a local Whisper model.</p>
+      <p id="speech-model"></p>
+      <button id="select-model" type="button">Choose local Whisper model</button>
+      <button id="download-model" type="button">Download multilingual Whisper tiny (76 MB)</button>
+      <fieldset>
+        <legend>Meeting notes and questions</legend>
+        <label>Provider
+          <select id="draft-provider">
+            <optgroup label="Local"><option value="ollama">Ollama</option><option value="lm-studio">LM Studio</option></optgroup>
+            <optgroup label="Hosted"><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></optgroup>
+          </select>
+        </label>
+        <div id="hosted-settings" hidden>
+          <p id="hosted-disclosure"></p>
+          <label>API key <input id="provider-key" type="password" autocomplete="off" spellcheck="false" maxlength="2048"></label>
+          <button id="save-provider-key" type="button">Save key</button>
+          <button id="remove-provider-key" type="button" hidden>Remove key</button>
+          <p id="provider-key-status" aria-live="polite"></p>
+        </div>
+        <label>Model <input id="draft-model" list="local-models" maxlength="200" placeholder="Choose or enter a model ID" value="qwen2.5:7b"></label>
+        <datalist id="local-models"></datalist>
+        <label id="available-model-label" hidden>Available models <select id="available-model"></select></label>
+        <button id="discover-models" type="button">Find models</button>
+        <p id="model-discovery-status" aria-live="polite"></p>
+      </fieldset>
+      <fieldset>
+        <legend>Temporary audio storage</legend>
+        <label>Per recording (MiB) <input id="meeting-quota" type="number" min="1" max="7168" value="2048"></label>
+        <label>Total (MiB) <input id="total-quota" type="number" min="1" max="1048576" value="10240"></label>
+        <p id="audio-quota-duration"></p>
+        <button id="save-audio-quotas" type="button">Save limits</button>
+        <p id="audio-quota-status" aria-live="polite"></p>
+      </fieldset>
+      </div>
+    </details>
+    </header>
+    <form id="meeting-notes" hidden>
+      <label class="note-title"><span class="visually-hidden">Meeting title</span>
+        <input name="title" required maxlength="200" placeholder="New note">
+      </label>
+      <details class="note-details">
+        <summary>Meeting details</summary>
+      <p><label>Transcription language
+        <select name="language">
+          <option value="en">English</option>
+          <option value="auto">Multilingual (auto-detect)</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="ja">Japanese</option>
+        </select>
+      </label></p>
+      <p><label>Participants <input name="participants" maxlength="1000" placeholder="Names separated by commas"></label></p>
+      <details>
+        <summary>File under a context</summary>
+        <p><label>Contexts <textarea name="filing" rows="2" maxlength="2000" placeholder="project: Launch&#10;topic: Release planning"></textarea></label></p>
+      </details>
+      </details>
+      <p><label><span class="visually-hidden">Raw notes</span><textarea name="notes" rows="5" cols="50"
+        maxlength="1000000" placeholder="Write notes, or press / for templates"></textarea></label></p>
+      <div class="note-actions">
+        <button id="note-templates" type="button">Templates</button>
+        <button type="submit">Import recording</button>
+        <small id="draft-save-state" role="note"></small>
+      </div>
+    </form>
+    <dialog id="event-filing" aria-labelledby="event-filing-title">
+      <form method="dialog">
+        <h2 id="event-filing-title">File calendar event</h2>
+        <label>Contexts <textarea name="contexts" rows="3" maxlength="2000" placeholder="project: Launch"></textarea></label>
+        <button value="cancel">Cancel</button>
+        <button value="save">Save</button>
+      </form>
+    </dialog>
+    <dialog id="template-picker" aria-labelledby="template-title">
+      <h2 id="template-title">Note templates</h2>
+      <form method="dialog">
+        <button value="meeting">Meeting</button>
+        <button value="one-on-one">One-on-one</button>
+        <button value="interview">Interview</button>
+        <button value="">Cancel</button>
+      </form>
+    </dialog>
+    <details id="library-tools">
+      <summary>Library</summary>
+      <div class="library-actions">
+        <button aria-current="page" id="recent-meetings" type="button">Recent meetings</button>
+        <button id="browse-contexts" type="button">Browse contexts</button>
+        <button id="recent-actions" type="button">Recent action items</button>
+        <button id="recover-capture" type="button">Recover recording</button>
+        <button id="open-meeting" type="button">Open saved meeting</button>
+        <button id="select-vault" type="button">Change vault folder</button>
+      </div>
+    </details>
+    <section id="agenda" aria-labelledby="agenda-title">
+      <header class="agenda-header">
+        <h2 id="agenda-title">Coming up</h2>
+        <button id="agenda-previous" type="button" aria-label="Previous week">‹</button>
+        <button id="agenda-next" type="button" aria-label="Next week">›</button>
+        <button id="agenda-import" type="button">Import calendar</button>
+      </header>
+      <ul id="agenda-events"></ul>
+      <p id="agenda-status" aria-live="polite"></p>
+    </section>
+    <p role="status"></p>
+    <form id="vault-search">
+      <h2 id="library-title">Recent meetings</h2>
+      <div class="library-search">
+        <label><span class="visually-hidden">Search vault</span><input name="query" type="search" maxlength="200" placeholder="Search meetings" aria-keyshortcuts="Control+K" title="Search meetings (Ctrl+K)"></label>
+        <button type="submit">Search</button>
+      </div>
+      <div class="library-filters">
+        <label><span class="visually-hidden">Context</span><input name="context" maxlength="120" placeholder="Filter by context"></label>
+      </div>
+    </form>
+    <div id="meeting-results">
+      <ul id="search-results" aria-label="Meetings"></ul>
+      <div id="meeting-empty">
+        <p id="meeting-empty-message" role="status">Your meeting library is empty.</p>
+        <button id="empty-new-note" type="button">Create a note</button>
+      </div>
+    </div>
+    <div id="context-results"></div>
+    <article id="saved-meeting" hidden>
+      <header class="saved-header">
+        <h2 id="saved-title" tabindex="-1"></h2>
+        <div class="meeting-metadata"><time id="saved-date"></time><span id="saved-participants"></span></div>
+      </header>
+      <section class="saved-section">
+      <div class="document-actions">
+        <h3>Meeting notes</h3>
+        <button id="edit-meeting-notes" type="button">Edit notes</button>
+        <small id="note-save-state" aria-live="polite"></small>
+        <button id="enhance-meeting" type="button">Enhance notes</button>
+        <button id="cancel-enhancement" type="button" hidden>Cancel generation</button>
+      </div>
+      <textarea id="enhanced-editor" rows="8" maxlength="1000000" aria-label="Meeting notes" hidden></textarea>
+      <div id="meeting-note-citations" class="note-document"></div>
+      <details id="enhanced-conflict" hidden>
+        <summary>Saved version changed while you were editing</summary>
+        <pre id="enhanced-conflict-text"></pre>
+        <button id="resolve-note-conflict" type="button">Keep my edits</button>
+      </details>
+      </section>
+      <details class="saved-details">
+      <summary>Filing and archive</summary>
+      <button id="archive-meeting" type="button">Archive meeting</button>
+      <p><label>Meeting contexts<br><textarea id="meeting-contexts" rows="3" maxlength="2000" placeholder="project: Launch&#10;topic: Release planning"></textarea></label></p>
+      <button id="save-contexts" type="button">Save contexts</button>
+      </details>
+      <details id="saved-transcript-panel" class="saved-section">
+      <summary>Transcript</summary>
+      <p id="transcript-revision"></p>
+      <button id="current-transcript" type="button" hidden>Show current transcript</button>
+      <button id="refine-meeting" type="button" aria-describedby="refine-unavailable">Refine from saved audio</button>
+      <span id="refine-unavailable" hidden>This meeting has no retained recording.</span>
+      <button id="flag-transcript" type="button">Flag for review</button>
+      <div class="saved-transcript-tools">
+        <input id="saved-transcript-search" type="search" aria-label="Search saved transcript" placeholder="Search transcript">
+        <button id="copy-saved-transcript" type="button">Copy transcript</button>
+      </div>
+      <p id="saved-transcript-matches" aria-live="polite"></p>
+      <pre id="saved-transcript"></pre>
+      </details>
+      <details class="saved-details" id="draft-history-panel">
+      <summary>Draft history</summary>
+      <p><label>Draft history <select id="draft-history"></select></label></p>
+      <div id="enhancement"></div>
+      <button id="use-draft" type="button">Replace notes with draft</button>
+      </details>
+
+      <form id="meeting-question">
+        <div class="question-composer"><label><span class="visually-hidden">Ask about this meeting</span><input name="question" required maxlength="1000" placeholder="Ask about this meeting"></label>
+        <button type="submit">Ask</button></div>
+      </form>
+      <div id="meeting-answer" aria-live="polite"></div>
+    </article>
+    <section id="recording-bar" aria-labelledby="capture-title" hidden>
+      <h2 id="capture-title" class="visually-hidden">Record a meeting</h2>
+      <p id="recording-state" data-state="idle"><span>Ready to record</span> <time id="recording-elapsed" hidden>00:00</time></p>
+      <details class="sound-settings">
+        <summary>Sound settings</summary>
+        <p><label><input id="keep-recording" type="checkbox"> Keep both audio tracks in the saved meeting</label></p>
+        <p><label>Microphone <select id="microphone"><option value="">Default</option></select></label></p>
+        <p><label>Microphone <meter id="microphone-level" min="0" max="1" value="0"></meter></label></p>
+        <p><label>System audio <meter id="system-level" min="0" max="1" value="0"></meter></label></p>
+      </details>
+      <div class="recording-actions">
+        <button id="capture-start" type="button">Start recording</button>
+        <button id="capture-pause" type="button" disabled>Pause recording</button>
+        <button id="capture-stop" type="button" disabled>Finish recording</button>
+        <button id="toggle-transcript" type="button" aria-expanded="false" aria-controls="live-panel">Show transcript</button>
+      </div>
+      <section id="live-panel" class="live-transcript" aria-labelledby="live-title" tabindex="-1" hidden>
+        <div class="transcript-toolbar">
+          <h2 id="live-title" class="transcript-label">Local transcript</h2>
+          <input id="transcript-search" type="search" aria-label="Search transcript" placeholder="Search transcript">
+          <button id="flag-live-transcript" type="button" title="Flag for review" disabled><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 21V4m0 1c5-5 9 4 14 0v10c-5 4-9-5-14 0"/></svg><span class="transcript-label">Flag for review</span></button>
+          <button id="copy-transcript" type="button" title="Copy transcript"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="4" width="12" height="13" rx="2"/><path d="M16 20H6a2 2 0 0 1-2-2V8"/></svg><span class="transcript-label">Copy transcript</span></button>
+          <button id="close-transcript" type="button" title="Collapse transcript"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/></svg><span class="transcript-label">Collapse transcript</span></button>
+        </div>
+        <pre id="transcript"></pre>
+        <pre id="transcript-preview" hidden></pre>
+        <pre id="transcript-matches" hidden></pre>
+        <button id="transcript-latest" type="button" hidden>Jump to latest</button>
+      </section>
+      <p id="capture-status" role="status"></p>
+      <p id="capture-quota" role="status" hidden>Temporary audio storage is at least 80% full.</p>
+      <p id="capture-backlog" role="status" hidden>Audio processing is falling behind.</p>
+    </section>
+    <form id="vault-question">
+      <div class="question-composer">
+        <label><span class="visually-hidden">Ask across meetings</span>
+          <input name="question" required maxlength="1000" placeholder="Ask across your meetings">
+        </label>
+        <button type="submit">Ask</button>
+      </div>
+      <div id="vault-answer" aria-live="polite"></div>
+    </form>
+  </main>
+</body>
+</html>
