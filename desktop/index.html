@@ -12,14 +12,43 @@
 <body>
   <main>
     <header class="app-header">
-      <h1><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>Stillwater</h1>
+      <h1><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>Stillwater</h1>
       <nav aria-label="Workspace">
         <button id="go-home" type="button" aria-current="page">Home</button>
+    <details id="library-tools">
+      <summary>My notes</summary>
+      <div class="library-actions">
+        <button aria-current="page" id="recent-meetings" type="button">Recent meetings</button>
+        <button id="browse-contexts" type="button">Browse contexts</button>
+        <button id="recent-actions" type="button">Recent action items</button>
+        <button id="prepare-import" type="button">Import a recording</button>
+        <button id="recover-capture" type="button">Recover recording</button>
+        <button id="open-meeting" type="button">Open saved meeting</button>
+        <button id="select-vault" type="button">Change vault folder</button>
+      </div>
+    </details>
+        <button id="calendar-link" type="button">Calendar</button>
         <button id="new-note" type="button">New note</button>
       </nav>
+    <span class="local-workspace">Local workspace</span>
     <details id="speech-settings">
       <summary>Settings</summary>
       <div class="settings-panel">
+      <h2>Recording settings</h2>
+      <fieldset id="audio-preferences"><legend>New recordings</legend>
+      <p><label>Transcription language
+        <select name="language" form="meeting-notes">
+          <option value="en">English</option>
+          <option value="auto">Multilingual (auto-detect)</option>
+          <option value="es">Spanish</option>
+          <option value="fr">French</option>
+          <option value="de">German</option>
+          <option value="ja">Japanese</option>
+        </select>
+      </label></p>
+        <p><label><input id="keep-recording" type="checkbox"> Keep both audio tracks in the saved meeting</label></p>
+        <p><label>Microphone <select id="microphone"><option value="">Default</option></select></label></p>
+      </fieldset>
       <h2>Speech models</h2>
       <p id="english-engine"></p>
       <p>Multilingual recording, audio import, recovery, and refinement use a local Whisper model.</p>
@@ -48,6 +77,15 @@
         <p id="model-discovery-status" aria-live="polite"></p>
       </fieldset>
       <fieldset>
+        <legend>Google Calendar</legend>
+        <p>In Google Calendar settings, choose your calendar, open Integrate calendar, and copy the secret address in iCal format.</p>
+        <label>Calendar address <input id="google-address" type="password" autocomplete="off" spellcheck="false"></label>
+        <button id="google-connect" type="button">Connect calendar</button>
+        <button id="google-sync" type="button" hidden>Sync now</button>
+        <button id="google-disconnect" type="button" hidden>Disconnect</button>
+        <p id="google-status" aria-live="polite"></p>
+      </fieldset>
+      <fieldset>
         <legend>Temporary audio storage</legend>
         <label>Per recording (MiB) <input id="meeting-quota" type="number" min="1" max="7168" value="2048"></label>
         <label>Total (MiB) <input id="total-quota" type="number" min="1" max="1048576" value="10240"></label>
@@ -64,16 +102,6 @@
       </label>
       <details class="note-details">
         <summary>Meeting details</summary>
-      <p><label>Transcription language
-        <select name="language">
-          <option value="en">English</option>
-          <option value="auto">Multilingual (auto-detect)</option>
-          <option value="es">Spanish</option>
-          <option value="fr">French</option>
-          <option value="de">German</option>
-          <option value="ja">Japanese</option>
-        </select>
-      </label></p>
       <p><label>Participants <input name="participants" maxlength="1000" placeholder="Names separated by commas"></label></p>
       <details>
         <summary>File under a context</summary>
@@ -105,17 +133,13 @@
         <button value="">Cancel</button>
       </form>
     </dialog>
-    <details id="library-tools">
-      <summary>Library</summary>
-      <div class="library-actions">
-        <button aria-current="page" id="recent-meetings" type="button">Recent meetings</button>
-        <button id="browse-contexts" type="button">Browse contexts</button>
-        <button id="recent-actions" type="button">Recent action items</button>
-        <button id="recover-capture" type="button">Recover recording</button>
-        <button id="open-meeting" type="button">Open saved meeting</button>
-        <button id="select-vault" type="button">Change vault folder</button>
-      </div>
-    </details>
+    <header id="journal-mast"><div><time id="journal-date"></time><h2>Meeting journal</h2></div>
+      <button id="journal-create" type="button">+ New note</button></header>
+    <section id="feature" aria-labelledby="feature-title"><canvas aria-hidden="true"></canvas>
+      <small>Up next</small><h2 id="feature-title">No upcoming events</h2><time id="feature-time"></time>
+      <button id="feature-open" type="button">Import calendar</button></section>
+    <p role="status"></p>
+    <div id="journal-columns">
     <section id="agenda" aria-labelledby="agenda-title">
       <header class="agenda-header">
         <h2 id="agenda-title">Coming up</h2>
@@ -126,7 +150,7 @@
       <ul id="agenda-events"></ul>
       <p id="agenda-status" aria-live="polite"></p>
     </section>
-    <p role="status"></p>
+    <div class="journal-library">
     <form id="vault-search">
       <h2 id="library-title">Recent meetings</h2>
       <div class="library-search">
@@ -145,9 +169,13 @@
       </div>
     </div>
     <div id="context-results"></div>
+    </div></div>
     <article id="saved-meeting" hidden>
       <header class="saved-header">
-        <h2 id="saved-title" tabindex="-1"></h2>
+        <h2 class="saved-title-row"><button id="rename-title" type="button" title="Edit meeting title"><span id="saved-title"></span><span aria-hidden="true" class="title-pencil">&#9998;</span></button>
+          <input id="title-editor" aria-label="Meeting title" maxlength="200" required hidden>
+        </h2>
+        <small id="title-status" role="status"></small>
         <div class="meeting-metadata"><time id="saved-date"></time><span id="saved-participants"></span></div>
       </header>
       <section class="saved-section">
@@ -202,18 +230,11 @@
     <section id="recording-bar" aria-labelledby="capture-title" hidden>
       <h2 id="capture-title" class="visually-hidden">Record a meeting</h2>
       <p id="recording-state" data-state="idle"><span>Ready to record</span> <time id="recording-elapsed" hidden>00:00</time></p>
-      <details class="sound-settings">
-        <summary>Sound settings</summary>
-        <p><label><input id="keep-recording" type="checkbox"> Keep both audio tracks in the saved meeting</label></p>
-        <p><label>Microphone <select id="microphone"><option value="">Default</option></select></label></p>
-        <p><label>Microphone <meter id="microphone-level" min="0" max="1" value="0"></meter></label></p>
-        <p><label>System audio <meter id="system-level" min="0" max="1" value="0"></meter></label></p>
-      </details>
       <div class="recording-actions">
         <button id="capture-start" type="button">Start recording</button>
         <button id="capture-pause" type="button" disabled>Pause recording</button>
         <button id="capture-stop" type="button" disabled>Finish recording</button>
-        <button id="toggle-transcript" type="button" aria-expanded="false" aria-controls="live-panel">Show transcript</button>
+        <button id="toggle-transcript" type="button" aria-expanded="false" aria-controls="live-panel" title="Show transcript" aria-label="Show transcript"><meter id="pill-level" aria-label="Audio level" min="0" max="1" value="0"></meter><span class="chevron" aria-hidden="true"></span></button>
       </div>
       <section id="live-panel" class="live-transcript" aria-labelledby="live-title" tabindex="-1" hidden>
         <div class="transcript-toolbar">
@@ -223,6 +244,12 @@
           <button id="copy-transcript" type="button" title="Copy transcript"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="4" width="12" height="13" rx="2"/><path d="M16 20H6a2 2 0 0 1-2-2V8"/></svg><span class="transcript-label">Copy transcript</span></button>
           <button id="close-transcript" type="button" title="Collapse transcript"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/></svg><span class="transcript-label">Collapse transcript</span></button>
         </div>
+      <details class="sound-settings">
+        <summary>Sound levels</summary>
+        <button type="button" id="audio-preferences-link">Recording settings</button>
+        <p><label>Microphone <meter id="microphone-level" min="0" max="1" value="0"></meter></label></p>
+        <p><label>System audio <meter id="system-level" min="0" max="1" value="0"></meter></label></p>
+      </details>
         <pre id="transcript"></pre>
         <pre id="transcript-preview" hidden></pre>
         <pre id="transcript-matches" hidden></pre>

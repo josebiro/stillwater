@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld("stillwater", {
   onTrayNavigate: (callback) => {
     ipcRenderer.on("tray:navigate", (_event, view) => callback(view));
   },
+  googleCalendar: (action,address) => ipcRenderer.invoke("calendar:google",action,address),
   readCalendar: () => ipcRenderer.invoke("calendar:read"),
   importCalendar: () => ipcRenderer.invoke("calendar:import"),
   selectVault: () => ipcRenderer.invoke("vault:select"),
@@ -22,6 +23,7 @@ contextBridge.exposeInMainWorld("stillwater", {
   refineMeeting: (bundle, language) => ipcRenderer.invoke("meeting:refine", bundle, language),
   transcriptRevision: (bundle, revision) => ipcRenderer.invoke("meeting:transcript", bundle, revision),
   flagTranscript: (bundle, revision) => ipcRenderer.invoke("meeting:flag-transcript", bundle, revision),
+  renameMeeting: (bundle, title) => ipcRenderer.invoke("meeting:rename", bundle, title),
   saveMeetingContexts: (bundle, value) => ipcRenderer.invoke("meeting:contexts", bundle, value),
   searchVault: (query, prompt, contextFilter) => ipcRenderer.invoke("meeting:search", query, prompt, false, contextFilter),
   recentActions: () => ipcRenderer.invoke("meeting:search", "", true, true),

@@ -61,9 +61,17 @@ const homeButton = document.querySelector("#go-home");
 const newNoteButton = document.querySelector("#new-note");
 const recordingBar = document.querySelector("#recording-bar");
 const libraryTools = document.querySelector("#library-tools");
-const wideWorkspace = matchMedia("(min-width: 1000px)");
-libraryTools.open = wideWorkspace.matches;
-wideWorkspace.addEventListener("change", ({ matches }) => { libraryTools.open = matches; });
+libraryTools.addEventListener("click", event => {
+  if (event.target.closest("button")) libraryTools.open = false;
+});
+libraryTools.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    libraryTools.open = false;
+    libraryTools.querySelector("summary").focus();
+  }
+});
+document.querySelector("#calendar-link").addEventListener("click", () => document.querySelector("#agenda-previous").focus());
+document.querySelector("#journal-create").addEventListener("click", () => newNoteButton.click());
 const settings = document.querySelector("#speech-settings");
 settings.addEventListener("keydown", (event) => {
   if (event.key !== "Escape" || !settings.open) return;
@@ -72,9 +80,10 @@ settings.addEventListener("keydown", (event) => {
   settings.querySelector("summary").focus();
 });
 document.addEventListener("pointerdown", event => {
+  if (!libraryTools.contains(event.target)) libraryTools.open = false;
   if (settings.open && !settings.contains(event.target)) settings.open = false;
 });
-const homeControls = ["#agenda", "#vault-search", "#meeting-results", "#vault-question", "#context-results",
+const homeControls = ["#journal-mast", "#feature", "#journal-columns", "#calendar-link", "#agenda", "#vault-search", "#meeting-results", "#vault-question", "#context-results",
   "#library-tools"].map((selector) => document.querySelector(selector));
 let workspaceView = "home";
 function showWorkspace(view, message = "") {
@@ -93,7 +102,7 @@ function showWorkspace(view, message = "") {
   homeButton.setAttribute("aria-current", view === "home" ? "page" : "false");
   newNoteButton.setAttribute("aria-current", editor ? "page" : "false");
   if (editor) notesEditor.focus();
-  if (view === "meeting") document.querySelector("#saved-title").focus();
+  if (view === "meeting") document.querySelector("#rename-title").focus();
   if (changed) window.scrollTo(0, 0);
 }
 homeButton.addEventListener("click", async () => {
@@ -109,7 +118,18 @@ homeButton.addEventListener("click", async () => {
   }
   showWorkspace("home", message);
 });
-newNoteButton.addEventListener("click", () => showWorkspace("editor"));
+function startNewNote() {
+  showWorkspace("editor");
+  const start = document.querySelector("#capture-start");
+  if (!start.disabled) start.click();
+}
+const prepareImport = document.querySelector("#prepare-import");
+prepareImport.addEventListener("click", () => {
+  showWorkspace("editor");
+  form.elements.title.focus();
+  status.textContent = "Enter the meeting title, then choose Import recording.";
+});
+newNoteButton.addEventListener("click", startNewNote);
 const emptyNewNoteButton = document.querySelector("#empty-new-note");
 emptyNewNoteButton.addEventListener("click", () => newNoteButton.click());
 document.addEventListener("keydown", (event) => {
@@ -122,7 +142,7 @@ document.addEventListener("keydown", (event) => {
   search.select();
 });
 window.stillwater.onTrayNavigate((view) => {
-  if (view === "editor") showWorkspace("editor");
+  if (view === "editor") startNewNote();
   if (view === "settings") {
     settings.open = true;
     settings.querySelector("summary").focus();
@@ -156,9 +176,59 @@ eventFiling.querySelector("form").addEventListener("submit", (event) => {
 eventFiling.querySelector('button[value="cancel"]').formNoValidate = true;
 let calendarData = { events: [], unsupported: 0 };
 let agendaOffset = 0;
+let staleGoogleCalendar = false;
+let renderedAgendaDay = "";
+function eventKey(event) {
+  return "stillwater-event-contexts:" + JSON.stringify([event.id, event.start]);
+}
+async function openEvent(event, open) {
+  if (document.querySelector("#capture-start").disabled) {
+    showWorkspace("editor");
+    status.textContent = "Finish the current recording before opening another calendar event.";
+    return;
+  }
+  if (form.dataset.calendarId === event.id && form.dataset.calendarStart === event.start) {
+    showWorkspace("editor");
+    return;
+  }
+  open.disabled = true;
+  await initialLibraryLoad;
+  const opened = await openSavedMeeting(undefined, undefined, false, undefined, event);
+  open.disabled = false;
+  if (opened !== false) return;
+  if ((notesEditor.value || form.elements.title.value || form.elements.participants.value || form.elements.filing.value) &&
+      !window.confirm("Replace the current unsaved note?")) return;
+  form.elements.title.value = event.title.slice(0, 200);
+  notesEditor.value = "";
+  form.elements.participants.value = "";
+  form.elements.filing.value = localStorage.getItem(eventKey(event)) ?? "";
+  form.dataset.calendarId = event.id;
+  form.dataset.calendarStart = event.start;
+  rememberDraft();
+  showWorkspace("editor");
+}
+
+let featuredEvent;
+function updateFeature(now) {
+  featuredEvent = calendarData.events.find(event => new Date(event.end || event.start) > now ||
+    (event.allDay && !event.end && new Date(event.start).toDateString() === now.toDateString()));
+  document.querySelector("#journal-date").textContent = now.toLocaleDateString(undefined,
+    { weekday: "long", month: "long", day: "numeric" });
+  document.querySelector("#feature-title").textContent = featuredEvent?.title || "No upcoming events";
+  document.querySelector("#feature-time").textContent = featuredEvent
+    ? new Date(featuredEvent.start).toLocaleString(undefined, { dateStyle: "medium",
+        ...(featuredEvent.allDay ? {} : { timeStyle: "short" }) }) : "";
+  document.querySelector("#feature-open").textContent = featuredEvent ? "Open meeting" : "Import calendar";
+}
+document.querySelector("#feature-open").addEventListener("click", event => {
+  if (featuredEvent) void openEvent(featuredEvent, event.currentTarget);
+  else document.querySelector("#agenda-import").click();
+});
 function renderAgenda() {
   agenda.replaceChildren();
   const today = new Date();
+  updateFeature(today);
+  renderedAgendaDay = today.toDateString();
   today.setHours(0, 0, 0, 0);
   const first = new Date(today);
   first.setDate(first.getDate() + agendaOffset * 7);
@@ -190,7 +260,7 @@ function renderAgenda() {
       previousDay = day;
     }
     const item = document.createElement("li");
-    const filingKey = "stillwater-event-contexts:" + JSON.stringify([event.id, event.start]);
+    const filingKey = eventKey(event);
     const open = document.createElement("button");
     open.type = "button";
     const time = (date) => date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
@@ -199,32 +269,7 @@ function renderAgenda() {
     const eventTime = document.createElement("small");
     eventTime.textContent = event.allDay ? "All day" : time(start) + (event.end ? " – " + time(new Date(event.end)) : "");
     open.append(title, eventTime);
-    open.addEventListener("click", async () => {
-      if (document.querySelector("#capture-start").disabled) {
-        showWorkspace("editor");
-        status.textContent = "Finish the current recording before opening another calendar event.";
-        return;
-      }
-      if (form.dataset.calendarId === event.id && form.dataset.calendarStart === event.start) {
-        showWorkspace("editor");
-        return;
-      }
-      open.disabled = true;
-      await initialLibraryLoad;
-      const opened = await openSavedMeeting(undefined, undefined, false, undefined, event);
-      open.disabled = false;
-      if (opened !== false) return;
-      if ((notesEditor.value || form.elements.title.value || form.elements.participants.value || form.elements.filing.value) &&
-          !window.confirm("Replace the current unsaved note?")) return;
-      form.elements.title.value = event.title.slice(0, 200);
-      notesEditor.value = "";
-      form.elements.participants.value = "";
-      form.elements.filing.value = localStorage.getItem(filingKey) ?? "";
-      form.dataset.calendarId = event.id;
-      form.dataset.calendarStart = event.start;
-      rememberDraft();
-      showWorkspace("editor");
-    });
+    open.addEventListener("click", () => openEvent(event, open));
     const file = document.createElement("button");
     file.type = "button";
     showEventFiling(file, localStorage.getItem(filingKey));
@@ -250,8 +295,63 @@ function renderAgenda() {
   });
   const range = first.toLocaleDateString() + " – " + new Date(last.getTime() - 1).toLocaleDateString();
   agendaStatus.textContent = range + (emptyToday ? " · No more events today" : events.length ? "" : " · No events") +
-    (calendarData.unsupported ? ` · ${calendarData.unsupported} unsupported calendar entries skipped` : "");
+    (calendarData.unsupported ? ` · ${calendarData.unsupported} unsupported calendar entries skipped` : "") +
+    (staleGoogleCalendar && calendarData.connected ? " · Last synced " + new Date(calendarData.syncedAt).toLocaleString() : "");
 }
+const googleAddress = document.querySelector("#google-address");
+const googleConnect = document.querySelector("#google-connect");
+const googleSync = document.querySelector("#google-sync");
+const googleDisconnect = document.querySelector("#google-disconnect");
+const googleStatus = document.querySelector("#google-status");
+let syncingGoogle = false;
+let lastGoogleAttempt = 0;
+
+function showCalendar(data) {
+  calendarData = data;
+  googleSync.hidden = !data.connected;
+  googleDisconnect.hidden = !data.connected && !data.unreadable;
+  googleConnect.textContent = data.connected ? "Replace calendar" : "Connect calendar";
+  googleStatus.textContent = data.unreadable ? "Could not unlock the saved calendar. Reconnect or disconnect it." :
+    data.connected ? "Last synced " + new Date(data.syncedAt).toLocaleString() + ". Refreshes every 15 minutes." : "";
+  renderAgenda();
+}
+
+async function updateGoogle(action) {
+  if (syncingGoogle) return;
+  syncingGoogle = true;
+  lastGoogleAttempt = Date.now();
+  googleConnect.disabled = googleSync.disabled = googleDisconnect.disabled = true;
+  googleStatus.textContent = action === "disconnect" ? "Disconnecting…" : "Syncing calendar…";
+  try {
+    const data = await window.stillwater.googleCalendar(action, action === "connect" ? googleAddress.value.trim() : undefined);
+    googleAddress.value = "";
+    staleGoogleCalendar = false;
+    showCalendar(data);
+    if (action === "disconnect") googleStatus.textContent = "Calendar disconnected.";
+  } catch (error) {
+    googleStatus.textContent = error.message;
+    if (calendarData.connected) {
+      staleGoogleCalendar = true;
+      renderAgenda();
+    }
+  } finally {
+    syncingGoogle = false;
+    googleConnect.disabled = googleSync.disabled = googleDisconnect.disabled = false;
+  }
+}
+
+function refreshCalendarIfDue() {
+  if (renderedAgendaDay !== new Date().toDateString()) renderAgenda();
+  else updateFeature(new Date());
+  if (calendarData.connected && Date.now() - Math.max(lastGoogleAttempt, calendarData.syncedAt) >= 15 * 60000) {
+    void updateGoogle("sync");
+  }
+}
+googleConnect.addEventListener("click", () => void updateGoogle("connect"));
+googleSync.addEventListener("click", () => void updateGoogle("sync"));
+googleDisconnect.addEventListener("click", () => void updateGoogle("disconnect"));
+setInterval(refreshCalendarIfDue, 60000);
+window.addEventListener("focus", refreshCalendarIfDue);
 for (const [selector, direction] of [["#agenda-previous", -1], ["#agenda-next", 1]]) {
   document.querySelector(selector).addEventListener("click", () => {
     agendaOffset += direction;
@@ -262,20 +362,22 @@ document.querySelector("#agenda-import").addEventListener("click", async () => {
   try {
     const data = await window.stillwater.importCalendar();
     if (data) {
-      calendarData = data;
       agendaOffset = 0;
-      renderAgenda();
+      showCalendar(data);
     }
   } catch (error) {
     agendaStatus.textContent = error.message;
   }
 });
 window.stillwater.readCalendar().then((data) => {
-  calendarData = data;
-  renderAgenda();
+  showCalendar(data);
+  if (data.connected) void updateGoogle("sync");
 }).catch((error) => { agendaStatus.textContent = error.message; });
 new MutationObserver(() => {
-  recordingBar.hidden = workspaceView !== "editor" && !document.querySelector("#capture-start").disabled;
+  const capturing = document.querySelector("#capture-start").disabled;
+  recordingBar.hidden = workspaceView !== "editor" && !capturing;
+  prepareImport.disabled = capturing;
+  button.disabled = capturing;
 }).observe(document.querySelector("#capture-start"), { attributes: true, attributeFilter: ["disabled"] });
 
 const templatePicker = document.querySelector("#template-picker");
@@ -304,7 +406,7 @@ templatePicker.addEventListener("close", () => {
   }
   notesEditor.focus();
 });
-const status = document.querySelector("[role=status]");
+const status = document.querySelector("main > [role=status]");
 async function fileWrittenNote() {
   const fields = new FormData(form);
   const { calendarId, calendarStart } = form.dataset;
@@ -399,6 +501,8 @@ async function findMeetings(query, announce = true, prompt = true, actions = fal
       open.type = "button";
       const title = result.meetingTitle ?? result.excerpt;
       const label = document.createElement("span");
+      label.dataset.titleBundle = result.bundle;
+      label.dataset.archived = String(Boolean(result.archived));
       label.textContent = title + (result.archived ? " · Archived" : "");
       open.append(label);
       if (date) {
@@ -558,6 +662,7 @@ const editor = document.querySelector("#enhanced-editor");
 const useDraft = document.querySelector("#use-draft");
 const noteState = document.querySelector("#note-save-state");
 let openedBundle;
+let openedMeetingId;
 let transcriptRevision = 1;
 let displayedRevision = 1;
 const refine = document.querySelector("#refine-meeting");
@@ -709,6 +814,71 @@ archiveButton.addEventListener("click", async () => {
   }
 });
 const contextEditor = document.querySelector("#meeting-contexts");
+const savedTitle = document.querySelector("#saved-title");
+const renameTitle = document.querySelector("#rename-title");
+const titleEditor = document.querySelector("#title-editor");
+const titleStatus = document.querySelector("#title-status");
+
+function displayMeetingTitle(title) {
+  savedTitle.textContent = title;
+  renameTitle.setAttribute("aria-label", "Edit meeting title: " + title);
+  renameTitle.hidden = false;
+  titleEditor.hidden = true;
+  titleEditor.readOnly = false;
+  titleStatus.textContent = "";
+}
+renameTitle.addEventListener("click", () => {
+  titleEditor.value = savedTitle.textContent;
+  renameTitle.hidden = true;
+  titleEditor.hidden = false;
+  titleEditor.focus();
+  titleEditor.select();
+});
+async function commitMeetingTitle(restoreFocus) {
+  if (titleEditor.hidden || titleEditor.readOnly) return;
+  const bundle = openedBundle;
+  const proposed = titleEditor.value.trim();
+  if (!proposed) {
+    titleStatus.textContent = "Enter a meeting title, or press Escape to keep the original.";
+    return;
+  }
+  titleEditor.readOnly = true;
+  try {
+    if (proposed === savedTitle.textContent) {
+      displayMeetingTitle(proposed);
+      if (restoreFocus) renameTitle.focus();
+      return;
+    }
+    const meetingId = openedMeetingId;
+    const title = await window.stillwater.renameMeeting(bundle, proposed);
+    for (const label of document.querySelectorAll("[data-title-bundle]")) {
+      if (label.dataset.titleBundle.endsWith("--" + meetingId)) {
+        label.textContent = title + (label.dataset.archived === "true" ? " · Archived" : "");
+      }
+    }
+    if (bundle !== openedBundle) return;
+    displayMeetingTitle(title);
+    titleStatus.textContent = "Title saved";
+    if (restoreFocus && workspaceView === "meeting") renameTitle.focus();
+  } catch (error) {
+    if (bundle !== openedBundle) return;
+    titleEditor.readOnly = false;
+    titleStatus.textContent = error.message.replace(/^Error invoking remote method 'meeting:rename': Error: /, "");
+  }
+}
+titleEditor.addEventListener("blur", () => void commitMeetingTitle(false));
+titleEditor.addEventListener("keydown", event => {
+  if (event.isComposing || titleEditor.readOnly) return;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void commitMeetingTitle(true);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    displayMeetingTitle(savedTitle.textContent);
+    renameTitle.focus();
+  }
+});
+
 const saveContexts = document.querySelector("#save-contexts");
 saveContexts.addEventListener("click", async () => {
   saveContexts.disabled = true;
@@ -964,6 +1134,7 @@ async function openSavedMeeting(result, anchor, contextBrowser = false, revision
       : await window.stillwater.openMeeting(result, contextBrowser);
     if (!meeting) return false;
     openedBundle = meeting.bundle;
+    openedMeetingId = meeting.metadata.meetingId;
     meetingAnswer.replaceChildren();
     archivedMeeting = meeting.archived;
     archiveButton.textContent = archivedMeeting ? "Restore meeting" : "Archive meeting";
@@ -981,7 +1152,7 @@ async function openSavedMeeting(result, anchor, contextBrowser = false, revision
     setNoteEditing(Boolean(draft));
     if (draft && enhancedDraftBase === savedNotes.revision) queueNoteSave();
     showHistory(meeting.enhancements);
-    document.querySelector("#saved-title").textContent = meeting.metadata.title;
+    displayMeetingTitle(meeting.metadata.title);
     const date = document.querySelector("#saved-date");
     date.dateTime = meeting.metadata.createdAt;
     date.textContent = new Date(meeting.metadata.createdAt).toLocaleDateString(undefined, { dateStyle: "medium" });
@@ -1023,6 +1194,8 @@ browseContexts.addEventListener("click", async () => {
       for (const meeting of group.meetings) {
         const item = document.createElement("li");
         const button = document.createElement("button");
+        button.dataset.titleBundle = meeting.bundle;
+        button.dataset.archived = String(Boolean(meeting.archived));
         button.textContent = meeting.title + (meeting.archived ? " · Archived" : "");
         button.addEventListener("click", () => void openSavedMeeting(meeting.bundle, undefined, true));
         item.append(button);
@@ -1085,3 +1258,30 @@ form.addEventListener("submit", async (event) => {
     button.disabled = false;
   }
 });
+
+const ribbon = document.querySelector("#feature canvas");
+new ResizeObserver(() => {
+  const { width, height } = ribbon.getBoundingClientRect();
+  if (!width || !height) return;
+  const scale = window.devicePixelRatio;
+  ribbon.width = Math.round(width * scale);
+  ribbon.height = Math.round(height * scale);
+  const context = ribbon.getContext("2d");
+  context.scale(scale, scale);
+  const ink = context.createLinearGradient(width * .42, 0, width, 0);
+  ink.addColorStop(0, "transparent");
+  ink.addColorStop(.45, "#dab2d0aa");
+  ink.addColorStop(1, "#ffd9b6bb");
+  context.strokeStyle = ink;
+  for (let line = 0; line < 78; line++) {
+    context.beginPath();
+    for (let step = 0; step <= 120; step++) {
+      const t = step / 120;
+      const x = width * (.4 + t * .72);
+      const y = height * (.18 + line * .011 + .29 * Math.sin(5.5*t + line*.019) + .18 * Math.cos(9*t - line*.023));
+      if (!step) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    }
+    context.stroke();
+  }
+}).observe(ribbon);

@@ -2,7 +2,13 @@
 
 Stillwater is a Windows meeting notebook. Write notes while it transcribes microphone and system audio locally, then turn the transcript and your writing into one editable outline with links back to the evidence. Meetings are saved in a local vault.
 
+**New note** opens the editor and starts local recording and transcription. The meter and chevron open the transcript above the recording controls. Pause and resume from the pill, or expand it and choose **Finish recording** to save the meeting. Choose the microphone, transcription language, and audio retention in **Settings** before starting. To transcribe an existing audio file, use **My notes → Import a recording**.
+
 In **Settings → Meeting notes and questions**, choose Ollama or LM Studio for local generation, or configure OpenAI or Anthropic to send relevant meeting text to that provider. Speech recognition runs on the device in both modes.
+
+## Google Calendar
+
+To show upcoming events on Home, copy the **Secret address in iCal format** from Google Calendar’s **Settings → Settings for my calendars → Integrate calendar**. Paste it into Stillwater’s **Settings → Google Calendar** and select **Connect calendar**. This read-only subscription refreshes on launch and every 15 minutes while Stillwater runs. Select an event to start or reopen its note. **Sync now** refreshes immediately. **Disconnect** removes the subscription and its local cache. Imported ICS files continue to appear alongside the subscription.
 
 ## Run the desktop UI
 

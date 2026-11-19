@@ -8,14 +8,14 @@ import { checkLocalRelease } from "./update-check.ts";
 export function stillwaterIcon() {
   const size = 24;
   const pixels = Buffer.alloc(size * size * 4);
-  const heights = [4, 9, 15, 10, 5];
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      if ((x - 11.5) ** 2 + (y - 11.5) ** 2 > 121) continue;
-      const offset = (y * size + x) * 4;
-      const bar = Math.floor((x - 5) / 3);
-      const mark = x >= 5 && x <= 18 && (x - 5) % 3 < 2 && Math.abs(y - 11.5) < heights[bar] / 2;
-      pixels.set(mark ? [33, 49, 18, 255] : [199, 222, 138, 255], offset);
+  for (let band = 0; band < 3; band++) {
+    const width = [17, 21, 14][band];
+    for (let x = 0; x < width; x++) {
+      const left = 2 + x;
+      const top = 6 + band * 5 - Math.floor(x / 8);
+      for (let y = top; y < top + 3; y++) {
+        pixels.set([238, 168, 225, 255], (y * size + left) * 4);
+      }
     }
   }
   return nativeImage.createFromBitmap(pixels, { width: size, height: size });

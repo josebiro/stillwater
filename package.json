@@ -14,6 +14,7 @@
     "check:outline": "node desktop/check-outline.ts",
     "check:hosted-settings": "electron desktop/check-hosted-settings.cjs",
     "check:meeting-qa": "node desktop/check-meeting-qa.ts",
+    "check:google-calendar": "electron desktop/check-google-calendar.cjs",
     "check:calendar": "node desktop/check-calendar.ts",
     "check:enhance": "node desktop/check-enhance.ts",
     "check:desktop": "electron . --check-worker",

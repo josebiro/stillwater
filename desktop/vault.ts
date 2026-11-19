@@ -214,6 +214,16 @@ function parseMeetingContexts(value: unknown) {
   return contexts;
 }
 
+export async function renameMeeting(vault: string, bundle: string, value: unknown) {
+  if (typeof value !== "string" || !value.trim() || value.trim().length > 200 || /[\r\n]/.test(value)) {
+    throw new Error("Enter a meeting title of 1 to 200 characters on one line.");
+  }
+  const title = value.trim();
+  const { metadata } = await openMeeting(vault, bundle);
+  if (metadata.title !== title) await writeMeetingMetadata(bundle, { ...metadata, title });
+  return title;
+}
+
 export async function saveMeetingContexts(vault: string, bundle: string, value: unknown) {
   const contexts = parseMeetingContexts(value);
   const { metadata } = await openMeeting(vault, bundle);

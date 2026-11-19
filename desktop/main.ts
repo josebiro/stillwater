@@ -1,5 +1,6 @@
+import { GoogleCalendarFeed } from "./google-calendar.ts";
 import { isHosted, listHostedModels, readHostedKey, saveHostedKey } from "./hosted-models.ts";
-import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, powerMonitor, powerSaveBlocker } from "electron";
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, safeStorage, powerMonitor, powerSaveBlocker } from "electron";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
@@ -9,7 +10,7 @@ import { downloadMultilingualModel, readModelSetting, requireLocalSpeechModel, w
 import { captureKeepsRecording, captureSpool, inspectCaptureStorage, recoverCapture, validateCaptureDirectory } from "./capture-spool.ts";
 import { checkRecovery } from "./check-recovery.ts";
 import { moonshineModelPath, requireMoonshineModel, startRecognition } from "./live-recognition.ts";
-import { archiveMeeting, createMeeting, flagTranscript, openMeeting, resolveFilingSuggestion, saveMeetingContexts, saveTranscriptRevision } from "./vault.ts";
+import { archiveMeeting, createMeeting, flagTranscript, openMeeting, renameMeeting, resolveFilingSuggestion, saveMeetingContexts, saveTranscriptRevision } from "./vault.ts";
 import { enhanceMeetingOutline, listEnhancements, lmStudioEndpoint } from "./enhance.ts";
 import { askMeeting, askVault } from "./meeting-qa.ts";
 import { parseCalendar } from "./calendar.ts";
@@ -110,7 +111,7 @@ if (process.argv.includes("--check-recovery")) {
   const window = new BrowserWindow({
     show: !checkCapture && !checkVaultUI && !checkTray,
     icon: stillwaterIcon(),
-    backgroundColor: "#121b21",
+    backgroundColor: "#110e15",
     autoHideMenuBar: true,
     width: 1120,
     height: 800,
@@ -137,13 +138,27 @@ if (process.argv.includes("--check-recovery")) {
       "SUMMARY:Calendar recording fixture", "DTSTART:" + start, "RRULE:FREQ=WEEKLY;COUNT=2",
       "END:VEVENT", "END:VCALENDAR"].join("\r\n"));
   }
+  const googleCalendar = new GoogleCalendarFeed(settingsDirectory,{
+    seal:async value => {
+      if (!(await safeStorage.isAsyncEncryptionAvailable())) throw Error("Secure calendar storage is unavailable.");
+      return safeStorage.encryptStringAsync(value);
+    },
+    open:async bytes => (await safeStorage.decryptStringAsync(bytes)).result,
+  });
+  if (!checkVaultUI && !checkCapture && !checkTray) await googleCalendar.load();
+  const agenda = () => googleCalendar.agenda(calendar);
+  ipcMain.handle("calendar:google",async (event,action,address) => {
+    if (event.senderFrame !== window.webContents.mainFrame || !["connect","sync","disconnect"].includes(action)) throw Error("Calendar settings unavailable.");
+    await googleCalendar.change(action,address);
+    return agenda();
+  });
   function linkedEvent(id: unknown, start: unknown) {
-    const event = calendar.events.find((entry) => entry.id === id && entry.start === start);
+    const event = agenda().events.find((entry) => entry.id === id && entry.start === start);
     return event ? { id: event.id, start: event.start } : undefined;
   }
   ipcMain.handle("calendar:read", (event) => {
     if (event.senderFrame !== window.webContents.mainFrame) throw new Error("Calendar unavailable");
-    return calendar;
+    return agenda();
   });
   ipcMain.handle("calendar:import", async (event) => {
     if (event.senderFrame !== window.webContents.mainFrame || active || spool) throw new Error("Calendar import unavailable");
@@ -164,7 +179,7 @@ if (process.argv.includes("--check-recovery")) {
         await writeFile(temporary, source, { flag: "wx", flush: true });
         await rename(temporary, calendarPath);
         calendar = next;
-        return calendar;
+        return agenda();
       } finally {
         await rm(temporary, { force: true });
       }
@@ -619,6 +634,18 @@ if (process.argv.includes("--check-recovery")) {
       active = false;
     }
   });
+  ipcMain.handle("meeting:rename", async (event, bundle, title) => {
+    if (event.senderFrame !== window.webContents.mainFrame || !openedMeeting || bundle !== openedMeeting.bundle) {
+      throw new Error("Open the meeting before renaming it.");
+    }
+    if (active || spool) throw new Error("A meeting operation is in progress. Try the title edit again.");
+    active = true;
+    try {
+      return await renameMeeting(openedMeeting.vault, bundle, title);
+    } finally {
+      active = false;
+    }
+  });
   ipcMain.handle("meeting:contexts", async (event, bundle, value) => {
     if (event.senderFrame !== window.webContents.mainFrame || active || spool ||
         !openedMeeting || bundle !== openedMeeting.bundle) throw new Error("Open the meeting before saving contexts.");
@@ -821,7 +848,11 @@ if (process.argv.includes("--check-recovery")) {
     };
     const folder = await mkdtemp(join(app.getPath("temp"), "stillwater-trace-check-"));
     try {
+      await window.webContents.executeJavaScript('navigator.mediaDevices.getDisplayMedia = async () => { throw Error("Tray fixture audio unavailable"); }; void 0');
       await click("new-note", "#meeting-notes:not([hidden])");
+      if (!(await window.webContents.executeJavaScript('document.querySelector("#capture-status").textContent.includes("Tray fixture audio unavailable")'))) {
+        throw new Error("Tray New note did not attempt audio capture");
+      }
       await click("settings", "#speech-settings[open]");
       window.close();
       if (window.isDestroyed() || window.isVisible()) throw new Error("Close did not hide the window to the tray");
@@ -839,6 +870,10 @@ if (process.argv.includes("--check-recovery")) {
     action.click();
     }
   } else if (checkVaultUI) {
+    // Native blur events require focus even when the test window is hidden.
+    window.webContents.debugger.attach();
+    await window.webContents.debugger.sendCommand("Emulation.setFocusEmulationEnabled", { enabled: true });
+    await window.webContents.executeJavaScript('navigator.mediaDevices.getDisplayMedia = async () => { throw Error("No input in writing-only fixture"); }; void 0');
     window.setSize(640, 520);
     await window.webContents.executeJavaScript("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
     const homeScreenshot = process.env.STILLWATER_CHECK_HOME_SCREENSHOT;
@@ -860,7 +895,7 @@ if (process.argv.includes("--check-recovery")) {
     await window.webContents.executeJavaScript(`
       (() => {
         const createNote = document.querySelector("#empty-new-note");
-        const actionBounds = createNote.getBoundingClientRect();
+        const actionBounds = document.querySelector("#journal-create").getBoundingClientRect();
         if (!actionBounds.height || actionBounds.bottom > innerHeight) {
           throw new Error("The empty library note action is outside the initial viewport");
         }
@@ -1014,6 +1049,27 @@ if (process.argv.includes("--check-recovery")) {
           await waitStatus("Transcript flagged for local review.");
           (await find("#current-transcript:not([hidden])")).click();
           await find("#segment-${currentId}");
+          const titleButton = document.querySelector("#rename-title");
+          const titleEditor = document.querySelector("#title-editor");
+          const originalTitle = document.querySelector("#saved-title").textContent;
+          titleButton.click();
+          titleEditor.value = "Cancelled title";
+          titleEditor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          if (document.querySelector("#saved-title").textContent !== originalTitle) throw Error("Escape changed the saved title");
+          titleButton.click();
+          titleEditor.value = "Atlas title edit";
+          if (document.activeElement !== titleEditor) throw Error("Title edit did not focus input");
+          titleEditor.blur();
+          try { await find("#title-editor[hidden]"); }
+          catch { throw Error("Title commit failed: " + document.querySelector("#title-status").textContent + " readonly=" + titleEditor.readOnly); }
+          if (document.querySelector("#saved-title").textContent !== "Atlas title edit" ||
+              ![...document.querySelectorAll("#search-results button")].some(b => b.textContent.includes("Atlas title edit"))) {
+            throw Error("Title edit did not update the meeting and its library entry");
+          }
+          titleButton.click();
+          titleEditor.value = originalTitle;
+          titleEditor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+          await find("#title-editor[hidden]");
           document.querySelector("#edit-meeting-notes").click();
           const noteEditor = document.querySelector("#enhanced-editor");
           if (noteEditor.hidden) throw new Error("Edit notes did not open the editor");
@@ -1322,9 +1378,9 @@ if (process.argv.includes("--check-recovery")) {
           await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
           document.querySelector("#go-home").click();
           const assertHomeLayout = () => {
-            const library = document.querySelector("#library-tools").getBoundingClientRect();
+            const library = document.querySelector("#vault-search").getBoundingClientRect();
             const agenda = document.querySelector("#agenda").getBoundingClientRect();
-            if (agenda.left < library.right || Math.abs(agenda.top - library.top) > 2) {
+            if (library.left < agenda.right || Math.abs(agenda.top - library.top) > 2) {
               throw new Error("Home agenda is displaced from library top by " + (agenda.top - library.top) + "px");
             }
           };
@@ -1473,7 +1529,10 @@ if (process.argv.includes("--check-recovery")) {
             await audio.close();
             return "Incomplete Moonshine model restored recording controls and released both inputs.";
           }
-          document.querySelector("#capture-start").click();
+          document.querySelector("#new-note").click();
+          const captureGeneration = generation;
+          document.querySelector("#new-note").click();
+          if (generation !== captureGeneration) throw new Error("New note started a second capture");
           await waitFor(/^(Checking microphone|Recording[.])/, 400);
           const microphone = document.querySelector("#microphone-level");
           const system = document.querySelector("#system-level");
@@ -1629,7 +1688,7 @@ if (process.argv.includes("--check-recovery")) {
             if (${checkCaptureLoopback}) {
               const systemLevel = document.querySelector("#system-level").value;
               if (systemLevel >= 0.01) firstSystemSignalMs ??= Math.round(performance.now() - playbackStarted);
-              document.querySelectorAll("meter").forEach((meter, index) => {
+              document.querySelectorAll("#microphone-level, #system-level").forEach((meter, index) => {
                 if (index < peakLevels.length) peakLevels[index] = Math.max(peakLevels[index], meter.value);
               });
             }

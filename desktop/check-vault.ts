@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
-import { archiveMeeting, createMeeting, openMeeting, saveMeetingContexts, saveTranscriptRevision } from "./vault.ts";
+import { archiveMeeting, createMeeting, openMeeting, renameMeeting, saveMeetingContexts, saveTranscriptRevision } from "./vault.ts";
 import { readEnhancedNotes, saveEnhancedNotes } from "./enhanced-notes.ts";
 import { refineMeeting } from "./import-meeting.ts";
 import { listVaultContexts, resolveMeetingLink, searchVault } from "./vault-search.ts";
@@ -16,6 +16,12 @@ try {
   const bundle = await createMeeting(vault, "Roadmap: / planning?", "Confirm owners.", [segment]);
   const reopened = await openMeeting(vault, bundle);
   assert.equal(reopened.metadata.title, "Roadmap: / planning?");
+  assert.equal(await renameMeeting(vault, bundle, "  Budget review / Q4  "), "Budget review / Q4");
+  assert.equal((await openMeeting(vault, bundle)).metadata.title, "Budget review / Q4");
+  assert.equal((await searchVault(vault, "Budget review"))[0].bundle, relative(vault, bundle));
+  for (const invalid of ["  ", "x".repeat(201), "a\nb"]) {
+    await assert.rejects(renameMeeting(vault, bundle, invalid), /title/i);
+  }
   assert.match(reopened.notes, /Confirm owners/);
   assert.deepEqual(reopened.segments, [{ ...segment, revision: 1, final: true }]);
   await assert.rejects(refineMeeting(process.cwd(), vault, bundle, "en"), /no retained recording/);

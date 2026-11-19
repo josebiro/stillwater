@@ -29,6 +29,7 @@ tools/jfk-reference.txt
 .env
 .env.*
 *-api-key.bin
+google-calendar.bin
 *.pem
 *.key
 

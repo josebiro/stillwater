@@ -7,6 +7,13 @@ const captureBacklog = document.querySelector("#capture-backlog");
 let captureInterruption = "";
 let captureRelease = Promise.resolve();
 const keepCaptureAudio = document.querySelector("#keep-recording");
+keepCaptureAudio.checked = localStorage.getItem("stillwater-keep-audio") === "true";
+keepCaptureAudio.addEventListener("change", () => localStorage.setItem("stillwater-keep-audio", String(keepCaptureAudio.checked)));
+document.querySelector("#audio-preferences-link").addEventListener("click", () => {
+  settings.open = true;
+  settings.querySelector("summary").focus();
+  document.querySelector("#audio-preferences").scrollIntoView({ block: "nearest" });
+});
 const quotaKey = "stillwater-audio-quotas";
 const meetingQuota = document.querySelector("#meeting-quota");
 const totalQuota = document.querySelector("#total-quota");
@@ -44,9 +51,11 @@ document.querySelector("#save-audio-quotas").addEventListener("click", () => {
   status.textContent = "Audio limits saved for new recordings.";
 });
 const recordingState = document.querySelector("#recording-state");
+const pillLevel = document.querySelector("#pill-level");
 const recordingElapsed = document.querySelector("#recording-elapsed");
 function setRecordingState(state, label) {
   recordingState.dataset.state = state;
+  if (state !== "recording") pillLevel.value = 0;
   recordingState.querySelector("span").textContent = label;
   recordingElapsed.hidden = state === "idle" || state === "starting";
 }
@@ -56,6 +65,7 @@ function showElapsed(samples) {
     .map((part) => String(part).padStart(2, "0")).join(":");
 }
 const microphone = document.querySelector("#microphone");
+microphone.addEventListener("change", () => localStorage.setItem("stillwater-microphone", microphone.value));
 const meters = ["microphone", "system"].map((name) => document.querySelector(`#${name}-level`));
 let context;
 let captureNode;
@@ -106,7 +116,8 @@ function showTranscript(expanded) {
   }
   transcriptPanel.hidden = !expanded;
   transcriptToggle.setAttribute("aria-expanded", String(expanded));
-  transcriptToggle.textContent = expanded ? "Hide transcript" : "Show transcript";
+  transcriptToggle.title = expanded ? "Hide transcript" : "Show transcript";
+  transcriptToggle.setAttribute("aria-label", transcriptToggle.title);
   if (expanded) {
     transcriptSearch.focus({ preventScroll: true });
     if (followOnOpen && !transcriptSearch.value.trim()) {
@@ -176,7 +187,7 @@ let streams = [];
 let generation = 0;
 
 async function refreshMicrophones() {
-  const selected = microphone.value;
+  const selected = microphone.value || localStorage.getItem("stillwater-microphone");
   const devices = await navigator.mediaDevices.enumerateDevices();
   microphone.replaceChildren(new Option("Default", ""));
   for (const device of devices.filter((item) => item.kind === "audioinput" && item.deviceId && item.deviceId !== "default")) {
@@ -383,6 +394,7 @@ startCapture.addEventListener("click", async () => {
         if (level >= 0.005) signalSeen[index] = true;
         meters[index].dataset.capturedSamples = String(nextOffset);
       }
+      if (!paused) pillLevel.value = Math.min(1, Math.sqrt(Math.max(...meters.map(meter => meter.value))) * 2);
       if (!paused && !liveFailed && !stopCapture.disabled) {
         const sources = ["microphone", "system audio"].filter((_, index) => signalSeen[index]);
         const message = sources.length
