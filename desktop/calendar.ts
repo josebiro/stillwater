@@ -110,18 +110,20 @@ function ruleDates(rule: string, start: string, zone: string | undefined, now: D
 }
 
 export function parseCalendar(text: string, now = new Date()) {
-  const events: { id: string; start: string; end: string | null; allDay: boolean; title: string }[] = [];
+  const events: { id: string; start: string; end: string | null; allDay: boolean; title: string; attendees?: string[] }[] = [];
   const exceptions = new Set<string>();
   const replacements: typeof events = [];
   let fields: Map<string, string> | undefined;
   let extraDates: (string | null)[] = [];
   let excludedDates: (string | null)[] = [];
+  let attendees: string[] = [];
   let nested = 0;
   let unsupported = 0;
   for (const line of text.replace(/\r?\n[ \t]/g, "").split(/\r?\n/)) {
     const marker = line.toUpperCase();
     if (marker === "BEGIN:VEVENT") {
       fields = new Map();
+      attendees = [];
       extraDates = [];
       excludedDates = [];
       nested = 0;
@@ -146,7 +148,7 @@ export function parseCalendar(text: string, now = new Date()) {
             if (!occurrence || excludedDates.includes(occurrence)) continue;
             (originalStart ? replacements : events).push({ id, start: occurrence,
               end: end ? new Date(Date.parse(occurrence) + duration).toISOString() : null,
-              allDay: fields.get("DTSTART")?.length === 8, title });
+              allDay: fields.get("DTSTART")?.length === 8, ...(attendees.length ? { attendees } : {}), title });
           }
         }
       }
@@ -164,6 +166,12 @@ export function parseCalendar(text: string, now = new Date()) {
       if (separator < 1) continue;
       const property = line.slice(0, separator);
       const name = property.split(";")[0].toUpperCase();
+      if (name === "ATTENDEE") {
+        const cn = /;CN=(?:"([^"]+)"|([^;]+))/i.exec(property);
+        const person = (cn?.[1] ?? cn?.[2] ?? line.slice(separator+1).replace(/^mailto:/i,"")).trim();
+        if (person && !attendees.includes(person)) attendees.push(person);
+        continue;
+      }
       const zone = /;TZID=(?:"([^"]+)"|([^;]+))/i.exec(property);
       if (name === "RDATE" || name === "EXDATE") {
         const dates = name === "RDATE" ? extraDates : excludedDates;

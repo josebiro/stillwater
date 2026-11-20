@@ -41,7 +41,7 @@ export function installTray(window: BrowserWindow, prepareExit: () => Promise<bo
     event.preventDefault();
     window.hide();
   });
-  function show(view?: "editor" | "settings") {
+  function show(view?: "editor" | "settings" | "question") {
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
@@ -110,6 +110,7 @@ export function installTray(window: BrowserWindow, prepareExit: () => Promise<bo
     const menu = Menu.buildFromTemplate([
     { label: "Open Stillwater", click: () => show() },
     { id: "new-note", label: "New Note", click: () => show("editor") },
+    { label: "Bring this up with…", click: () => show("question") },
     { id: "settings", label: "Settings", click: () => show("settings") },
     { type: "separator" },
     { label: `Stillwater v${app.getVersion()}`, enabled: false },

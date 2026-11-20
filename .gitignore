@@ -43,3 +43,7 @@ google-calendar.bin
 /docs/progress.md
 /docs/spec.md
 /docs/windows-package.md
+
+# Personal labels, decisions, commitments and meeting reminders
+stillwater-journal.json
+.journal-*.tmp
