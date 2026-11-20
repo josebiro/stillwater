@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld("stillwater", {
   onTrayNavigate: (callback) => {
     ipcRenderer.on("tray:navigate", (_event, view) => callback(view));
   },
+  dailySource: (id,anchor,revision) => ipcRenderer.invoke("daily:source",id,anchor,revision),
+  dailyJournal: command => ipcRenderer.invoke("daily:journal",command),
   googleCalendar: (action,address) => ipcRenderer.invoke("calendar:google",action,address),
   readCalendar: () => ipcRenderer.invoke("calendar:read"),
   importCalendar: () => ipcRenderer.invoke("calendar:import"),

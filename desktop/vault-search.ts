@@ -15,7 +15,7 @@ async function directories(path: string) {
   }
 }
 
-async function* vaultMeetings(vault: string, meetingId?: string) {
+export async function* vaultPaths(vault: string, meetingId?: string) {
   for (const collection of ["meetings", "archive"]) {
     const meetings = join(vault, collection);
     for (const year of await directories(meetings)) {
@@ -24,9 +24,15 @@ async function* vaultMeetings(vault: string, meetingId?: string) {
         if (!/^\d{4}-\d{2}-\d{2}-[a-z0-9-]+--[a-f0-9-]{36}$/.test(name)) continue;
         if (meetingId && !name.endsWith(`--${meetingId}`)) continue;
         const bundle = join(meetings, year, name);
-        yield { bundle, path: relative(vault, bundle), meeting: await openMeeting(vault, bundle) };
+        yield { bundle, path: relative(vault, bundle) };
       }
     }
+  }
+}
+
+async function* vaultMeetings(vault: string, meetingId?: string) {
+  for await (const entry of vaultPaths(vault, meetingId)) {
+    yield { ...entry, meeting: await openMeeting(vault, entry.bundle) };
   }
 }
 

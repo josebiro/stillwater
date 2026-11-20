@@ -1,3 +1,4 @@
+import { readDaily, changeDaily } from "./daily.ts";
 import { GoogleCalendarFeed } from "./google-calendar.ts";
 import { isHosted, listHostedModels, readHostedKey, saveHostedKey } from "./hosted-models.ts";
 import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, safeStorage, powerMonitor, powerSaveBlocker } from "electron";
@@ -505,6 +506,39 @@ if (process.argv.includes("--check-recovery")) {
     }).catch(() => []);
     callback(screen ? { video: screen, audio: "loopback" } : {});
   });
+  let dailyPaths: typeof searched;
+  let dailyWriting = false;
+  ipcMain.handle("daily:journal", async (event, command) => {
+    if (window.isDestroyed() || event.senderFrame !== window.webContents.mainFrame) throw Error("Journal unavailable.");
+    if (command && (dailyWriting || active || (spool && ["attach","detach","rename"].includes(command.type)))) throw Error("Finish the current operation and retry.");
+    if (command) dailyWriting = true;
+    const metadataChange = command && ["attach","detach","rename"].includes(command.type);
+    if (metadataChange) active = true;
+    try {
+      const vault = command ? await chooseVault() : fixtureVault ?? preferredVault;
+      if (!vault) return null;
+      const result = command ? await changeDaily(vault,command) : await readDaily(vault);
+      dailyPaths = {vault, paths:new Set(result.meetings.map(m=>m.path))};
+      return result;
+    } finally {
+      if (command) dailyWriting = false;
+      if (metadataChange) active = false;
+    }
+  });
+  ipcMain.handle("daily:source", async (event, id, anchor, revision) => {
+    if (event.senderFrame !== window.webContents.mainFrame || !dailyPaths ||
+        dailyPaths.vault !== (fixtureVault ?? preferredVault) || typeof id !== "string" ||
+        !/^[a-f0-9-]{36}$/.test(id)) throw Error("Meeting source unavailable.");
+    const {vault,paths} = dailyPaths;
+    const path = [...paths].find(path=>path.endsWith("--"+id));
+    if (!path) throw Error("Meeting source unavailable.");
+    const bundle = await resolveMeetingLink(vault,path);
+    const meeting = await openMeeting(vault,bundle,revision);
+    const passage = anchor && meeting.segments.find(s=>s.id===anchor)?.text;
+    if (anchor && !passage) throw Error("Transcript passage unavailable.");
+    const enhanced = await readEnhancedNotes(bundle);
+    return {passage, notes:enhanced.text || meeting.notes.replace(/^---[\s\S]*?---\s*/, "")};
+  });
   ipcMain.handle("meeting:search", async (event, query, prompt = true, actions = false, contextFilter = "") => {
     if (event.senderFrame !== window.webContents.mainFrame || active || spool) throw new Error("Search unavailable");
     if (typeof query !== "string" || query.length > 200) throw new Error("Enter a shorter search query");
@@ -577,7 +611,7 @@ if (process.argv.includes("--check-recovery")) {
     active = true;
     try {
       if (result !== undefined) {
-        const listing = contextBrowser === true ? browsed : searched;
+        const listing = contextBrowser === "journal" ? dailyPaths : contextBrowser === true ? browsed : searched;
         if (typeof result !== "string" || !listing?.paths.has(result)) throw new Error("Meeting result expired");
         return await loadMeeting(listing.vault, await resolveMeetingLink(listing.vault, result));
       }
@@ -1614,6 +1648,11 @@ if (process.argv.includes("--check-recovery")) {
           await waitFor(/^Recording[.]/);
           if (state.dataset.state !== "recording") throw new Error("Recording indicator did not resume");
           const afterResume = await waitForFrames(beforePause);
+          if (${process.argv.includes("--check-moments")}) {
+            const writing = editor.elements.notes;
+            document.dispatchEvent(new KeyboardEvent("keydown",{ctrlKey:true,shiftKey:true,code:"KeyM",bubbles:true}));
+            if (!writing.value.includes("#moment-") || document.activeElement!==writing) throw Error("Moment shortcut lost the cursor or timestamp");
+          }
           if (${checkCaptureBacklog}) {
             for (let attempt = 0; attempt < 150 && document.querySelector("#capture-backlog").hidden; attempt++) {
               await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1774,6 +1813,13 @@ if (process.argv.includes("--check-recovery")) {
             await new Promise((resolve) => setTimeout(resolve, 50));
           }
           if (document.querySelector("#saved-meeting").hidden) throw new Error("Saved recording did not reopen");
+          if (${process.argv.includes("--check-moments")}) {
+            const marker = document.querySelector('#meeting-note-citations a[href^="#moment-"]');
+            if (!marker) throw Error("Saved note lost its recording marker");
+            marker.click();
+            for(let i=0;i<100&&!document.querySelector("#saved-transcript-panel").open;i++)await new Promise(r=>setTimeout(r,25));
+            if (!document.querySelector("#saved-transcript-panel").open) throw Error("Recording marker did not open saved speech");
+          }
           if (${checkCombinedNotes}) {
             const original = "- Orchid gate — pencil in Thursday (Q7)";
             const editor = document.querySelector("#enhanced-editor");

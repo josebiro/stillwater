@@ -8,6 +8,7 @@
   <script src="../node_modules/markdown-it/dist/markdown-it.min.js" defer></script>
   <script src="renderer.js" defer></script>
   <script src="capture.js" defer></script>
+  <script src="daily.js" defer></script>
 </head>
 <body>
   <main>
@@ -19,6 +20,8 @@
       <summary>My notes</summary>
       <div class="library-actions">
         <button aria-current="page" id="recent-meetings" type="button">Recent meetings</button>
+        <button id="manage-labels" type="button">Manage labels</button>
+        <button id="batch-labels" type="button">Label multiple notes</button>
         <button id="browse-contexts" type="button">Browse contexts</button>
         <button id="recent-actions" type="button">Recent action items</button>
         <button id="prepare-import" type="button">Import a recording</button>
@@ -100,6 +103,8 @@
       <label class="note-title"><span class="visually-hidden">Meeting title</span>
         <input name="title" required maxlength="200" placeholder="New note">
       </label>
+      <div class="label-strip" id="draft-labels"></div>
+      <details id="meeting-prep" hidden><summary>Meeting prep</summary><div></div></details>
       <details class="note-details">
         <summary>Meeting details</summary>
       <p><label>Participants <input name="participants" maxlength="1000" placeholder="Names separated by commas"></label></p>
@@ -111,6 +116,7 @@
       <p><label><span class="visually-hidden">Raw notes</span><textarea name="notes" rows="5" cols="50"
         maxlength="1000000" placeholder="Write notes, or press / for templates"></textarea></label></p>
       <div class="note-actions">
+        <button id="mark-moment" type="button" disabled title="Mark a moment (Ctrl+Shift+M)">Mark moment</button>
         <button id="note-templates" type="button">Templates</button>
         <button type="submit">Import recording</button>
         <small id="draft-save-state" role="note"></small>
@@ -169,6 +175,11 @@
       </div>
     </div>
     <div id="context-results"></div>
+    <section id="daily-home"><h2>Follow-ups</h2><div class="daily-actions">
+      <button type="button" id="quick-question">Bring this up with…</button>
+      <button type="button" id="commitments">What do I owe?</button>
+      <button type="button" id="decision-history">Project decisions</button></div>
+      <div id="owed-preview"></div></section>
     </div></div>
     <article id="saved-meeting" hidden>
       <header class="saved-header">
@@ -177,6 +188,8 @@
         </h2>
         <small id="title-status" role="status"></small>
         <div class="meeting-metadata"><time id="saved-date"></time><span id="saved-participants"></span></div>
+        <div class="label-strip" id="saved-labels"></div>
+        <button type="button" id="record-decision">Record a decision</button>
       </header>
       <section class="saved-section">
       <div class="document-actions">
@@ -268,6 +281,9 @@
       </div>
       <div id="vault-answer" aria-live="polite"></div>
     </form>
+    <dialog id="daily-dialog" aria-labelledby="daily-title"><div class="daily-heading"><h2 id="daily-title"></h2>
+      <button type="button" aria-label="Close dialog" id="daily-close">Close</button></div>
+      <div id="daily-content"></div><p id="daily-error" role="status"></p></dialog>
   </main>
 </body>
 </html>

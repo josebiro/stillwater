@@ -104,6 +104,7 @@ function showWorkspace(view, message = "") {
   if (editor) notesEditor.focus();
   if (view === "meeting") document.querySelector("#rename-title").focus();
   if (changed) window.scrollTo(0, 0);
+  document.dispatchEvent(new Event("workspace-view"));
 }
 homeButton.addEventListener("click", async () => {
   let message = "";
@@ -143,6 +144,7 @@ document.addEventListener("keydown", (event) => {
 });
 window.stillwater.onTrayNavigate((view) => {
   if (view === "editor") startNewNote();
+  if (view === "question") document.dispatchEvent(new Event("daily-question"));
   if (view === "settings") {
     settings.open = true;
     settings.querySelector("summary").focus();
@@ -200,7 +202,7 @@ async function openEvent(event, open) {
       !window.confirm("Replace the current unsaved note?")) return;
   form.elements.title.value = event.title.slice(0, 200);
   notesEditor.value = "";
-  form.elements.participants.value = "";
+  form.elements.participants.value = (event.attendees ?? []).join(", ").slice(0,1000);
   form.elements.filing.value = localStorage.getItem(eventKey(event)) ?? "";
   form.dataset.calendarId = event.id;
   form.dataset.calendarStart = event.start;
@@ -567,7 +569,7 @@ const initialLibraryLoad = findMeetings("", false, false);
 document.querySelector("#select-vault").addEventListener("click", async () => {
   try {
     const path = await window.stillwater.selectVault();
-    if (path) await findMeetings("");
+    if (path) { await findMeetings(""); document.dispatchEvent(new Event("workspace-view")); }
   } catch (error) {
     status.textContent = error.message;
   }
@@ -714,6 +716,8 @@ function showSavedTranscript(meeting) {
   document.querySelector("#saved-transcript").replaceChildren(...meeting.segments.map((segment) => {
     const line = document.createElement("span");
     line.id = "segment-" + segment.id;
+    line.dataset.startMs = String(segment.startMs);
+    line.dataset.endMs = String(segment.endMs);
     line.textContent = `${(segment.startMs / 1000).toFixed(1)} s · ${segment.source}: ${segment.text}\n`;
     return line;
   }));
@@ -884,6 +888,7 @@ saveContexts.addEventListener("click", async () => {
   saveContexts.disabled = true;
   try {
     await window.stillwater.saveMeetingContexts(openedBundle, contextEditor.value);
+    document.dispatchEvent(new Event("workspace-view"));
     status.textContent = "Saved meeting contexts.";
   } catch (error) {
     status.textContent = error.message;
@@ -932,6 +937,20 @@ function renderMarkdown(container, text) {
   for (const link of container.querySelectorAll("a")) {
     const target = link.getAttribute("href");
     const citation = /^transcript(?:-r(\d+))?\.md#([\w-]+)$/.exec(target);
+    const moment = /^#moment-(\d+)$/.exec(target);
+    if (moment) {
+      link.addEventListener("click", async event => {
+        event.preventDefault();
+        await showTranscriptRevision(transcriptRevision);
+        const ms = Number(moment[1]);
+        const distance = line => Math.max(0, Number(line.dataset.startMs)-ms, ms-Number(line.dataset.endMs));
+        const lines = [...document.querySelectorAll("#saved-transcript [data-start-ms]")];
+        const nearest = lines.sort((a,b)=>distance(a)-distance(b))[0];
+        if (nearest) revealTranscriptSegment(nearest.id.slice(8));
+        else status.textContent = "No transcript passages in this meeting.";
+      });
+      continue;
+    }
     if (!citation) {
       link.replaceWith(document.createTextNode(link.textContent + " (" + target + ")"));
       continue;

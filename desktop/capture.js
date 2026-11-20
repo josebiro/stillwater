@@ -55,11 +55,13 @@ const pillLevel = document.querySelector("#pill-level");
 const recordingElapsed = document.querySelector("#recording-elapsed");
 function setRecordingState(state, label) {
   recordingState.dataset.state = state;
+  document.querySelector("#mark-moment").disabled = !["recording","paused"].includes(state);
   if (state !== "recording") pillLevel.value = 0;
   recordingState.querySelector("span").textContent = label;
   recordingElapsed.hidden = state === "idle" || state === "starting";
 }
 function showElapsed(samples) {
+  recordingElapsed.dataset.milliseconds = String(Math.round(samples / 16));
   const seconds = Math.floor(samples / 16000);
   recordingElapsed.textContent = [Math.floor(seconds / 60), seconds % 60]
     .map((part) => String(part).padStart(2, "0")).join(":");

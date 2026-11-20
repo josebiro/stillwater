@@ -95,7 +95,7 @@ export async function createMeeting(vault: string, title: string, notes: string,
   return target;
 }
 
-export async function openMeeting(vault: string, bundle: string, requestedRevision?: number) {
+export async function openMeetingHeader(vault: string, bundle: string) {
   const root = await realpath(vault);
   const path = await realpath(bundle);
   const match = bundleName.exec(basename(path));
@@ -114,6 +114,11 @@ export async function openMeeting(vault: string, bundle: string, requestedRevisi
   if (metadata.schemaVersion !== 1 || metadata.meetingId !== match[1]) {
     throw new Error("Unsupported meeting metadata or mismatched ID");
   }
+  return { metadata, read, path, archived: dirname(year) === resolve(root, "archive") };
+}
+
+export async function openMeeting(vault: string, bundle: string, requestedRevision?: number) {
+  const {metadata, read, path, archived} = await openMeetingHeader(vault,bundle);
   const notes = await read("notes.md");
   const revision = requestedRevision ?? metadata.transcriptRevision;
   if (!Number.isSafeInteger(metadata.transcriptRevision) || !Number.isSafeInteger(revision) ||
@@ -128,7 +133,7 @@ export async function openMeeting(vault: string, bundle: string, requestedRevisi
       return false;
     },
   );
-  return { metadata, notes, segments, revision, flagged, archived: dirname(year) === resolve(root, "archive") };
+  return { metadata, notes, segments, revision, flagged, archived };
 }
 
 export async function flagTranscript(vault: string, bundle: string, revision: number) {

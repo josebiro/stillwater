@@ -6,6 +6,17 @@ Stillwater is a Windows meeting notebook. Write notes while it transcribes micro
 
 In **Settings → Meeting notes and questions**, choose Ollama or LM Studio for local generation, or configure OpenAI or Anthropic to send relevant meeting text to that provider. Speech recognition runs on the device in both modes.
 
+## Daily meeting workflows
+
+- Use **+ Add label** beside a note’s title to file it under a project, person, area, topic, or organization. Click a label to browse related notes. **My notes → Manage labels** and **Label multiple notes** work across the vault.
+- Open the next occurrence of a calendar meeting and expand **From last time** to see its previous note, last recorded decision, and outstanding follow-ups. **Add to agenda** copies the item you choose.
+- Use **Bring this up with…** on Home or in the Windows tray to save a question for a person. The editor shows it when an attendee, entered participant, or person label matches. It stays pending until you mark it discussed.
+- During recording, **Ctrl+Shift+M** or **Mark moment** inserts a timestamp at the cursor. Click the timestamp in the saved notes to reveal the nearest transcript passage.
+- **What do I owe?** lets you review cited action items from enhanced notes, confirm the recipient, dismiss suggestions, and mark commitments done. Confirmed commitments appear on Home.
+- Use **Record a decision** on a saved project note. Choose the same project and decision topic to record a later outcome with its reason. **Project decisions** on Home shows the current decision, earlier outcomes, and their sources.
+
+These workflows use local vault data. Include the vault’s `stillwater-journal.json` file when backing up reminders, commitments, reusable labels, and decision history.
+
 ## Google Calendar
 
 To show upcoming events on Home, copy the **Secret address in iCal format** from Google Calendar’s **Settings → Settings for my calendars → Integrate calendar**. Paste it into Stillwater’s **Settings → Google Calendar** and select **Connect calendar**. This read-only subscription refreshes on launch and every 15 minutes while Stillwater runs. Select an event to start or reopen its note. **Sync now** refreshes immediately. **Disconnect** removes the subscription and its local cache. Imported ICS files continue to appear alongside the subscription.

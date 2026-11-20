@@ -540,3 +540,19 @@ main:has(#journal-mast:not([hidden])) #new-note { display: none; }
 .saved-title-row #rename-title:hover { color: var(--primary); }
 .title-pencil { color: var(--muted); margin-left: .6rem; font: 16px "Segoe UI Symbol", sans-serif; }
 #title-status { color: var(--muted); }
+
+.label-strip, .daily-actions, .daily-heading, .daily-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+.label-strip { margin-block:8px; }
+.label-strip button, #record-decision, #mark-moment { font-size:.85rem; }
+.context-chip { display:inline-flex; background:var(--control); border-radius:12px; }
+.context-chip button { padding:3px 6px; background:transparent; border:0; color:var(--focus); }
+#daily-home, #meeting-prep { border-top:1px solid var(--line); padding-block:10px; margin-top:12px; }
+#daily-home h2 { font:24px var(--reader); }
+.daily-heading { justify-content:space-between; }
+#daily-dialog { width:min(520px,88vw); max-height:80vh; overflow:auto; }
+#daily-content > label, #daily-content .daily-row > label { display:grid; gap:4px; margin:8px 0; }
+#daily-content .daily-check { display:flex; align-items:center; }
+#daily-content p, #daily-content blockquote { white-space:pre-wrap; overflow-wrap:anywhere; }
+.daily-row { border-top:1px solid var(--line); padding-block:8px; }
+.daily-row strong, .daily-row p { width:100%; }
+#daily-error:not(:empty) {color:#ffb4ad;margin:8px 0 0;}
