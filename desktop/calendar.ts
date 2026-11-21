@@ -1,3 +1,5 @@
+import { joinLink } from "./meeting-alerts.ts";
+
 function eventDate(value: string, zone?: string) {
   const match = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/.exec(value.toUpperCase());
   if (!match) return null;
@@ -109,8 +111,14 @@ function ruleDates(rule: string, start: string, zone: string | undefined, now: D
   return dates;
 }
 
-export function parseCalendar(text: string, now = new Date()) {
-  const events: { id: string; start: string; end: string | null; allDay: boolean; title: string; attendees?: string[] }[] = [];
+const unescapeText = (value: string | undefined) =>
+  value?.replace(/\\[nN]/g, " ").replace(/\\([,;\\])/g, "$1");
+
+/** `owner` is the calendar owner's email; an event they declined is marked so it gets no alert. */
+export function parseCalendar(text: string, now = new Date(), owner = "") {
+  const events: { id: string; start: string; end: string | null; allDay: boolean; title: string; attendees?: string[];
+    join?: { url: string; service: string }; declined?: boolean }[] = [];
+  let declined = false;
   const exceptions = new Set<string>();
   const replacements: typeof events = [];
   let fields: Map<string, string> | undefined;
@@ -124,6 +132,7 @@ export function parseCalendar(text: string, now = new Date()) {
     if (marker === "BEGIN:VEVENT") {
       fields = new Map();
       attendees = [];
+      declined = false;
       extraDates = [];
       excludedDates = [];
       nested = 0;
@@ -144,11 +153,15 @@ export function parseCalendar(text: string, now = new Date()) {
           if (originalStart) exceptions.add(JSON.stringify([id, originalStart]));
           const title = (fields.get("SUMMARY") ?? "Untitled event").replace(/\\[nN]/g, " ").replace(/\\([,;\\])/g, "$1");
           const duration = end ? Date.parse(end) - Date.parse(start) : 0;
+          // Only the call link is kept from the description and location, never their text.
+          const join = joinLink(fields.get("X-GOOGLE-CONFERENCE"), unescapeText(fields.get("DESCRIPTION")),
+            unescapeText(fields.get("LOCATION")));
           for (const occurrence of new Set([start, ...extraDates, ...generated])) {
             if (!occurrence || excludedDates.includes(occurrence)) continue;
             (originalStart ? replacements : events).push({ id, start: occurrence,
               end: end ? new Date(Date.parse(occurrence) + duration).toISOString() : null,
-              allDay: fields.get("DTSTART")?.length === 8, ...(attendees.length ? { attendees } : {}), title });
+              allDay: fields.get("DTSTART")?.length === 8, ...(attendees.length ? { attendees } : {}), title,
+              ...(join ? { join } : {}), ...(declined ? { declined } : {}) });
           }
         }
       }
@@ -170,6 +183,8 @@ export function parseCalendar(text: string, now = new Date()) {
         const cn = /;CN=(?:"([^"]+)"|([^;]+))/i.exec(property);
         const person = (cn?.[1] ?? cn?.[2] ?? line.slice(separator+1).replace(/^mailto:/i,"")).trim();
         if (person && !attendees.includes(person)) attendees.push(person);
+        const email = line.slice(separator + 1).replace(/^mailto:/i, "").trim().toLowerCase();
+        if (owner && email === owner.toLowerCase() && /;PARTSTAT=DECLINED/i.test(property)) declined = true;
         continue;
       }
       const zone = /;TZID=(?:"([^"]+)"|([^;]+))/i.exec(property);

@@ -5,19 +5,49 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
   <title>Stillwater</title>
   <link rel="stylesheet" href="workspace.css">
+  <link rel="stylesheet" href="folders.css">
   <script src="../node_modules/markdown-it/dist/markdown-it.min.js" defer></script>
   <script src="renderer.js" defer></script>
   <script src="capture.js" defer></script>
   <script src="daily.js" defer></script>
+  <script src="folder-icons.js" defer></script>
+  <script src="folders.js" defer></script>
 </head>
 <body>
-  <main>
-    <header class="app-header">
-      <h1><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>Stillwater</h1>
-      <nav aria-label="Workspace">
-        <button id="go-home" type="button" aria-current="page">Home</button>
+  <aside id="sidebar" aria-label="Sidebar">
+    <div class="sidebar-top">
+      <button id="sidebar-toggle" type="button" class="icon-button" aria-controls="sidebar" aria-expanded="true" title="Close sidebar (Ctrl+S)" aria-keyshortcuts="Control+S Control+\"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/></svg><span class="visually-hidden">Close sidebar</span></button>
+      <button id="sidebar-search" type="button" class="icon-button" title="Search notes (Ctrl+K)"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></svg><span class="visually-hidden">Search notes</span></button>
+    </div>
+    <nav class="sidebar-nav" aria-label="Workspace">
+      <button id="go-home" type="button" aria-current="page"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20h-5v-5H9v5H4z"/></svg>Home</button>
+      <button id="calendar-link" type="button"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Calendar</button>
+      <button id="sidebar-followups" type="button"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 10 17l9-10"/></svg>Follow-ups</button>
+    </nav>
+    <section class="sidebar-section" id="favorite-section" aria-labelledby="favorite-heading" hidden>
+      <h2 id="favorite-heading">Favorites</h2>
+      <ul id="favorite-folders" class="folder-list"></ul>
+    </section>
+    <section class="sidebar-section" aria-labelledby="spaces-heading">
+      <div class="sidebar-heading"><h2 id="spaces-heading">Spaces</h2>
+        <button id="sidebar-new-folder" type="button" class="icon-button small" title="New folder"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="visually-hidden">New folder</span></button></div>
+      <div class="space-row" id="my-notes-row">
+        <button id="my-notes-expand" type="button" class="space-chevron" aria-expanded="true" aria-controls="folder-tree" title="Collapse My notes"><span class="chevron" aria-hidden="true"></span><span class="visually-hidden">Show folders</span></button>
+        <button id="my-notes-link" type="button" class="space-link"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="10.5" width="12" height="9" rx="2"/><path d="M9 10.5V8a3 3 0 0 1 6 0v2.5"/></svg>My notes</button>
+      </div>
+      <ul id="folder-tree" class="folder-list" role="tree" aria-label="Folders in My notes"></ul>
+      <p id="folder-tree-empty" class="sidebar-hint">Create a folder to group related notes.</p>
+    </section>
+    <section class="sidebar-section" aria-labelledby="labels-heading">
+      <div class="sidebar-heading"><h2 id="labels-heading">Labels</h2>
+        <button id="sidebar-new-label-view" type="button" class="icon-button small" title="Create view for a label" aria-haspopup="menu"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="visually-hidden">Create view for a label</span></button>
+        <button id="sidebar-manage-labels" type="button" class="icon-button small" title="Manage labels"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/></svg><span class="visually-hidden">Manage labels</span></button></div>
+      <ul id="sidebar-labels" class="label-list"></ul>
+      <p id="sidebar-labels-empty" class="sidebar-hint">Labels you add to notes appear here.</p>
+    </section>
+    <div class="sidebar-foot">
     <details id="library-tools">
-      <summary>My notes</summary>
+      <summary>More</summary>
       <div class="library-actions">
         <button aria-current="page" id="recent-meetings" type="button">Recent meetings</button>
         <button id="manage-labels" type="button">Manage labels</button>
@@ -30,10 +60,16 @@
         <button id="select-vault" type="button">Change vault folder</button>
       </div>
     </details>
-        <button id="calendar-link" type="button">Calendar</button>
+    <span class="local-workspace">Local vault</span>
+    </div>
+  </aside>
+  <main>
+    <header class="app-header">
+      <button id="sidebar-open" type="button" class="icon-button" aria-controls="sidebar" title="Open sidebar (Ctrl+S)" aria-keyshortcuts="Control+S Control+\" hidden><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/></svg><span class="visually-hidden">Open sidebar</span></button>
+      <h1><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>Stillwater</h1>
+      <nav aria-label="Note actions">
         <button id="new-note" type="button">New note</button>
       </nav>
-    <span class="local-workspace">Local workspace</span>
     <details id="speech-settings">
       <summary>Settings</summary>
       <div class="settings-panel">
@@ -87,6 +123,9 @@
         <button id="google-sync" type="button" hidden>Sync now</button>
         <button id="google-disconnect" type="button" hidden>Disconnect</button>
         <p id="google-status" aria-live="polite"></p>
+        <label><input id="alerts-enabled" type="checkbox"> Alert me a minute before a meeting starts</label>
+        <button id="alerts-test" type="button">Show a test alert</button>
+        <p id="alerts-status" aria-live="polite"></p>
       </fieldset>
       <fieldset>
         <legend>Temporary audio storage</legend>
@@ -103,6 +142,7 @@
       <label class="note-title"><span class="visually-hidden">Meeting title</span>
         <input name="title" required maxlength="200" placeholder="New note">
       </label>
+      <div class="folder-strip" id="draft-folders"></div>
       <div class="label-strip" id="draft-labels"></div>
       <details id="meeting-prep" hidden><summary>Meeting prep</summary><div></div></details>
       <details class="note-details">
@@ -188,7 +228,9 @@
         </h2>
         <small id="title-status" role="status"></small>
         <div class="meeting-metadata"><time id="saved-date"></time><span id="saved-participants"></span></div>
+        <div class="folder-strip" id="saved-folders"></div>
         <div class="label-strip" id="saved-labels"></div>
+        <div id="note-suggestions" class="note-suggestions"></div>
         <button type="button" id="record-decision">Record a decision</button>
       </header>
       <section class="saved-section">
@@ -240,6 +282,79 @@
       </form>
       <div id="meeting-answer" aria-live="polite"></div>
     </article>
+    <section id="folder-view" aria-labelledby="folder-title" hidden>
+      <header class="folder-hero">
+        <div class="folder-hero-icon" id="folder-icon"></div>
+        <h2 id="folder-title" tabindex="-1"></h2>
+        <input id="folder-title-editor" aria-label="Folder name" maxlength="100" hidden>
+        <p id="folder-description"></p>
+        <p class="folder-meta" id="folder-meta"></p>
+        <div class="folder-hero-actions" id="folder-actions"></div>
+      </header>
+      <aside class="folder-tip" id="folder-tip" hidden>
+        <div><strong id="folder-tip-title"></strong><p id="folder-tip-text"></p></div>
+        <button type="button" class="icon-button small" id="folder-tip-close" title="Dismiss"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span class="visually-hidden">Dismiss</span></button>
+      </aside>
+      <div class="folder-subfolders" id="folder-subfolders"></div>
+      <div class="folder-toolbar">
+        <div class="folder-tabs" role="tablist" aria-label="Show">
+          <button type="button" role="tab" id="folder-tab-notes" aria-selected="true"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 9h6M9 13h6"/></svg>Notes</button>
+          <button type="button" role="tab" id="folder-tab-people" aria-selected="false"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 20c1-4 4-5.5 7-5.5s6 1.5 7 5.5"/></svg>People</button>
+          <button type="button" role="tab" id="folder-tab-labels" aria-selected="false"><svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12V5h7l9 9-7 7z"/><circle cx="8.5" cy="8.5" r="1.2"/></svg>Labels</button>
+        </div>
+        <label class="folder-filter"><span class="visually-hidden">Filter notes</span><input id="folder-filter" type="search" maxlength="120" placeholder="Filter notes"></label>
+        <button type="button" id="folder-select" class="quiet">Select</button>
+      </div>
+      <div class="folder-bulk" id="folder-bulk" hidden>
+        <span id="folder-bulk-count">0 selected</span>
+        <button type="button" id="folder-bulk-all" class="quiet">Select all</button>
+        <button type="button" id="folder-bulk-move">Add to folder…</button>
+        <button type="button" id="folder-bulk-label">Add label…</button>
+        <button type="button" id="folder-bulk-remove">Remove from this folder</button>
+        <button type="button" id="folder-bulk-done" class="quiet">Done</button>
+      </div>
+      <ul id="folder-notes" class="folder-notes" aria-label="Notes"></ul>
+      <div class="folder-drop" id="folder-empty" hidden>
+        <svg class="glyph large" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>
+        <p id="folder-empty-text">Drag notes here to add them</p>
+        <button type="button" id="folder-empty-new">New note in this folder</button>
+      </div>
+    </section>
+    <div id="folder-menu" class="popover" role="menu" hidden></div>
+    <div id="folder-toast" class="toast" aria-live="polite" hidden></div>
+    <div id="folder-picker" class="popover picker" role="dialog" aria-label="Add to folder" hidden>
+      <input id="folder-picker-search" type="search" placeholder="Search folders" maxlength="100" aria-label="Search folders">
+      <ul id="folder-picker-list" role="listbox" aria-multiselectable="true" aria-label="Folders"></ul>
+      <button type="button" id="folder-picker-create" class="picker-create"></button>
+    </div>
+    <dialog id="folder-dialog" aria-labelledby="folder-dialog-title">
+      <form method="dialog" id="folder-form">
+        <h2 id="folder-dialog-title">Create folder</h2>
+        <div class="folder-name-row">
+          <button type="button" id="folder-form-icon" class="folder-icon-button" aria-haspopup="dialog" title="Change icon"></button>
+          <label><span class="visually-hidden">Name</span><input name="title" maxlength="100" placeholder="Untitled folder" autocomplete="off"></label>
+        </div>
+        <label>Description <textarea name="description" rows="2" maxlength="500" placeholder="What goes in this folder (optional)"></textarea></label>
+        <label>Inside <select name="parent"></select></label>
+        <p class="folder-form-note" id="folder-form-note"></p>
+        <div class="dialog-actions"><button value="cancel" formnovalidate class="quiet">Cancel</button><button value="save" id="folder-form-save">Create folder</button></div>
+      </form>
+    </dialog>
+    <div id="icon-picker" class="popover icon-picker" role="dialog" aria-label="Choose an icon" hidden>
+      <div class="icon-picker-tabs" role="tablist">
+        <button type="button" role="tab" id="icon-tab-icons" aria-selected="true">Icons</button>
+        <button type="button" role="tab" id="icon-tab-emoji" aria-selected="false">Emoji</button>
+      </div>
+      <div id="icon-pane-icons">
+        <div class="swatches" id="icon-colors" role="radiogroup" aria-label="Colour"></div>
+        <div class="icon-grid" id="icon-glyphs"></div>
+      </div>
+      <div id="icon-pane-emoji" hidden>
+        <input id="emoji-search" type="search" placeholder="Search emoji…" aria-label="Search emoji">
+        <div class="icon-grid emoji" id="emoji-grid"></div>
+        <p id="emoji-empty" hidden>No emoji found.</p>
+      </div>
+    </div>
     <section id="recording-bar" aria-labelledby="capture-title" hidden>
       <h2 id="capture-title" class="visually-hidden">Record a meeting</h2>
       <p id="recording-state" data-state="idle"><span>Ready to record</span> <time id="recording-elapsed" hidden>00:00</time></p>

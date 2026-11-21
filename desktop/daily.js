@@ -1,7 +1,7 @@
 (() => {
   const get = id => document.getElementById(id);
   const dialog = get("daily-dialog"), content = get("daily-content"), error = get("daily-error");
-  const empty = () => ({meetings:[], labels:[], commitments:[], decisions:[], questions:[]});
+  const empty = () => ({meetings:[], labels:[], commitments:[], decisions:[], questions:[], folders:[]});
   let data = empty(), sequence = 0, saving = false;
   function element(tag, value) {
     const node = document.createElement(tag);
@@ -11,8 +11,8 @@
   function action(name, run) {
     const b = element("button",name);
     b.type = "button";
-    b.addEventListener("click", async () => {
-      try { await run(); }
+    b.addEventListener("click", async (event) => {
+      try { await run(event); }
       catch (e) { (dialog.open ? error : status).textContent = e.message; }
     });
     return b;
@@ -99,6 +99,7 @@
     }));
   }
   function showLabel(tag) {
+    if(window.openLabelPage){dialog.close();window.openLabelPage(tag);return;}
     sheet(tag);
     const matches=data.meetings.filter(m=>m.tags.some(t=>key(t)===key(tag)));
     for(const m of matches) content.append(action(m.title,()=>source(m)));
@@ -115,7 +116,13 @@
       remove.setAttribute("aria-label","Remove "+tag);
       chip.append(action(tag,()=>showLabel(tag)),remove); container.append(chip);
     }
-    container.append(action("+ Add label",()=>addLabel(draft)));
+    const add=action(tags.length?"+":"+ Add label",event=>{
+      if(window.openLabelPicker) window.openLabelPicker(event.currentTarget, draft?{labels:true,draft:true}:{labels:true,ids:[openedMeetingId]});
+      else addLabel(draft);
+    });
+    add.setAttribute("aria-haspopup","dialog");add.className="add-label";
+    if(tags.length){add.title="Add or remove labels";add.setAttribute("aria-label","Add or remove labels");}
+    container.append(add);
   }
   function manage() {
     sheet("Manage labels");
@@ -255,6 +262,7 @@
     prep();
     const preview=get("owed-preview");
     preview.replaceChildren(...data.commitments.filter(c=>c.status==="confirmed").map(c=>action(c.text+" · "+c.recipient,owed)));
+    document.dispatchEvent(new CustomEvent("journal-data",{detail:data}));
   }
   function mark() {
     if(get("mark-moment").disabled)return;
@@ -267,8 +275,11 @@
   document.addEventListener("keydown",e=>{
     if(workspaceView==="editor"&&!dialog.open&&e.ctrlKey&&e.shiftKey&&e.code==="KeyM"&&!get("mark-moment").disabled){e.preventDefault();mark();}
   });
+  // Folders (folders.js) share this journal: its data, its writes and the label sheets.
+  window.stillwaterJournal={get data(){return data;},change,refresh,showLabel,addLabel,manage,bulk,
+    labelFields,sheet,action,element,draftTags,editDraftTags,close:()=>dialog.close(),error:message=>{error.textContent=message;}};
   get("manage-labels").onclick=manage;get("batch-labels").onclick=bulk;get("quick-question").onclick=quickQuestion;
-  get("commitments").onclick=owed;get("decision-history").onclick=historyView;get("record-decision").onclick=decide;
+  get("commitments").onclick=owed;get("sidebar-manage-labels").onclick=manage;get("decision-history").onclick=historyView;get("record-decision").onclick=decide;
   form.elements.participants.addEventListener("input",prep);form.elements.filing.addEventListener("input",paint);
   document.addEventListener("daily-question",quickQuestion);
   const update=()=>refresh().catch(e=>{status.textContent=e.message;});

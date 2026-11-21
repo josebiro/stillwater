@@ -6,6 +6,7 @@
   "main": "desktop/bootstrap.cjs",
   "scripts": {
     "start": "electron .",
+    "build": "node desktop/check-build.mjs",
     "check:worker": "node desktop/check.ts",
     "check:live-worker": "node desktop/check-live-worker.ts",
     "check:vault": "node desktop/check-vault.ts",
@@ -16,6 +17,8 @@
     "check:meeting-qa": "node desktop/check-meeting-qa.ts",
     "check:google-calendar": "electron desktop/check-google-calendar.cjs",
     "check:daily": "electron desktop/check-daily.cjs",
+    "check:folders": "electron desktop/check-folders.cjs",
+    "check:alerts": "electron desktop/check-alerts.cjs",
     "check:calendar": "node desktop/check-calendar.ts",
     "check:enhance": "node desktop/check-enhance.ts",
     "check:desktop": "electron . --check-worker",

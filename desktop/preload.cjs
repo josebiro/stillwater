@@ -8,6 +8,11 @@ contextBridge.exposeInMainWorld("stillwater", {
   dailyJournal: command => ipcRenderer.invoke("daily:journal",command),
   googleCalendar: (action,address) => ipcRenderer.invoke("calendar:google",action,address),
   readCalendar: () => ipcRenderer.invoke("calendar:read"),
+  meetingAlerts: (enabled) => ipcRenderer.invoke("alerts:setting", enabled),
+  testMeetingAlert: () => ipcRenderer.invoke("alerts:test"),
+  onMeetingAlertStart: (callback) => ipcRenderer.on("alert:start", (_event, meeting) => callback(meeting)),
+  onMeetingAlertAsk: (callback) => ipcRenderer.on("alert:ask-recording", (_event, id, start) =>
+    ipcRenderer.send("alert:recording", id, start, callback(id, start))),
   importCalendar: () => ipcRenderer.invoke("calendar:import"),
   selectVault: () => ipcRenderer.invoke("vault:select"),
   currentModel: () => ipcRenderer.invoke("model:current"),

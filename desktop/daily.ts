@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { listEnhancements } from "./enhance.ts";
 import { vaultPaths } from "./vault-search.ts";
 import { openMeeting, openMeetingHeader, saveMeetingContexts } from "./vault.ts";
+import { applySeries, changeFolders, type Folder, readFolders } from "./folders.ts";
 
 const kinds = new Set(["project", "person", "topic", "area", "organization"]);
 function text(value: unknown, limit: number) {
@@ -22,17 +23,17 @@ export function label(value: unknown) {
 type Question = { id: string; person: string; text: string; discussed: boolean };
 type Decision = { id: string; meeting: string; project: string; subject: string; text: string; reason: string; anchor: string; revision: number; date: string };
 type Commitment = { id: string; meeting: string; text: string; anchor: string; revision: number; recipient: string; status: string };
-type Journal = { labels: string[]; questions: Question[]; decisions: Decision[]; commitments: Commitment[] };
+type Journal = { labels: string[]; questions: Question[]; decisions: Decision[]; commitments: Commitment[]; folders: Folder[] };
 async function readJournal(vault: string): Promise<Journal> {
   const file = join(vault, "stillwater-journal.json");
   try {
     if (!(await lstat(file)).isFile()) throw Error("Invalid journal file.");
     const data = JSON.parse(await readFile(file, "utf8"));
     if (data.version !== 1 || !["labels","questions","decisions","commitments"].every(key => Array.isArray(data[key]))) throw Error("Unsupported journal.");
-    return data;
+    return { ...data, folders: readFolders(data.folders) };
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
-    return { labels: [], questions: [], decisions: [], commitments: [] };
+    return { labels: [], questions: [], decisions: [], commitments: [], folders: [] };
   }
 }
 async function saveJournal(vault: string, journal: Journal) {
@@ -68,15 +69,28 @@ async function indexJournal(vault: string, journal: Journal) {
     }
   }
   return { meetings, labels:[...labels.values()].sort(), questions:journal.questions, decisions:journal.decisions,
-    commitments:[...journal.commitments,...candidates] };
+    commitments:[...journal.commitments,...candidates], folders:journal.folders };
 }
 
+/** Note id -> the calendar series it was saved from. */
+const seriesOf = (meetings: { id: string; event?: { id?: string } }[]) =>
+  new Map(meetings.filter(m => m.event?.id).map(m => [m.id, m.event!.id!] as [string, string]));
 export async function readDaily(vault:string) {
-  return indexJournal(vault,await readJournal(vault));
+  const journal = await readJournal(vault);
+  const index = await indexJournal(vault,journal);
+  // Folders that follow a series pick up its new notes here, once per note.
+  if (applySeries(journal.folders, seriesOf(index.meetings))) await saveJournal(vault,journal);
+  return index;
 }
 export async function changeDaily(vault:string, command: Record<string,unknown>) {
   const journal = await readJournal(vault);
   const index = await indexJournal(vault,journal);
+  if (String(command.type).startsWith("folder-")) {
+    const folder = changeFolders(journal.folders, command, new Set(index.meetings.map(m=>m.id)), seriesOf(index.meetings));
+    if (folder === undefined) throw Error("Unknown journal operation.");
+    await saveJournal(vault,journal);
+    return { ...(await readDaily(vault)), folder };
+  }
   switch(command.type) {
     case "label":
     case "rename":
