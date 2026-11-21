@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Only a superseded pull_request run is cancelled; push and manual runs finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # npm ci does not always fetch the Electron binary; the installer is a no-op when it is present.
+      - run: node node_modules/electron/install.js
+      - run: npm run check:outline
+      - run: npm run check:meeting-qa
+      - run: npm run check:calendar
+      - run: npm run check:hosted-settings

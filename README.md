@@ -51,11 +51,23 @@ Audio benchmarks and recording checks that read external fixtures require separa
 
 ## Build the Windows installer
 
-The packager expects Python 3.12 dependencies from `tools/cuda-probe-requirements.txt` installed in `.venv`, Moonshine Voice 0.1.6 staged in `.dev/moonshine`, and the English Medium Streaming model snapshot in `.dev/moonshine-models/download.moonshine.ai/model/medium-streaming-en/quantized_26_11_02`. Install the Electron dependencies with `npm ci` and supply an NSIS compiler.
+The packager expects Python 3.12 dependencies from `tools/cuda-probe-requirements.txt` installed in `.venv`, Moonshine Voice 0.1.6 staged in `.dev/moonshine`, and the English Medium Streaming model snapshot in `.dev/moonshine-models/download.moonshine.ai/model/medium-streaming-en/quantized_26_11_02`. Install the Electron dependencies with `npm ci` and supply an NSIS compiler. `tools/stage-build-deps.ps1` stages the Python and Moonshine prerequisites; pass `-Python` with a Python 3.12 interpreter if `python` is a different version.
 
 ```powershell
+./tools/stage-build-deps.ps1
 $payload = & ./tools/package-windows.ps1
 & ./tools/build-installer.ps1 -Payload $payload -Compiler (Get-Command makensis.exe).Source
 ```
+
+## Release
+
+Set the new version in `package.json` and `package-lock.json`, merge to `main`, then tag that commit and push the tag:
+
+```powershell
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The **Release** workflow checks that the tag matches the `package.json` version and points at a commit on `main`, builds the installer, and publishes `Stillwater-Setup-x64.exe`, `Stillwater-CUDA-x64.zip`, and their SHA-256 checksums as a GitHub release. A tag with a suffix, such as `v0.2.0-rc.1`, is published as a prerelease. To try the build without publishing, run the workflow manually from the Actions tab; the files are kept as an artifact for three days.
 
 Keep the generated setup executable and CUDA companion ZIP together for installation. Model weights, runtime binaries, installers, meeting vaults, and test-run artifacts are managed separately from the source repository.
