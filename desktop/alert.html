@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'">
+  <title>Meeting starting</title>
+  <link rel="stylesheet" href="alert.css">
+</head>
+<body>
+  <main id="alert" role="alertdialog" aria-labelledby="alert-title" aria-describedby="alert-time">
+    <div class="alert-text">
+      <strong id="alert-title"></strong>
+      <span id="alert-time"></span>
+    </div>
+    <div class="alert-actions">
+      <button id="alert-primary" type="button" class="primary"><span id="alert-primary-label"></span><small id="alert-primary-note"></small></button>
+      <button id="alert-more" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="alert-menu" title="More actions"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg><span class="visually-hidden">More actions</span></button>
+      <button id="alert-close" type="button" title="Dismiss"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg><span class="visually-hidden">Dismiss</span></button>
+    </div>
+    <div id="alert-menu" role="menu" hidden>
+      <button type="button" role="menuitem" id="alert-join-only">Join meeting only</button>
+      <button type="button" role="menuitem" id="alert-notes-only">Take notes without joining</button>
+      <button type="button" role="menuitem" id="alert-settings">Alert settings</button>
+    </div>
+  </main>
+  <script src="alert.js"></script>
+</body>
+</html>

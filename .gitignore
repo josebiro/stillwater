@@ -47,3 +47,6 @@ google-calendar.bin
 # Personal labels, decisions, commitments and meeting reminders
 stillwater-journal.json
 .journal-*.tmp
+
+# Screenshot checks
+shots/

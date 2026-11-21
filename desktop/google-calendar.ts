@@ -18,6 +18,11 @@ function googleAddress(value: unknown) {
   return url.href;
 }
 
+/** The calendar owner's email, which Google puts in the feed's address. */
+function ownerOf(address: string) {
+  try { return decodeURIComponent(new URL(address).pathname.split("/")[3] ?? ""); } catch { return ""; }
+}
+
 async function download(address: string) {
   const response = await fetch(address, {redirect:"error",signal:AbortSignal.timeout(20000)}).catch(() => {
     throw new Error("Could not reach Google Calendar. Check your connection and try again.");
@@ -40,7 +45,7 @@ async function download(address: string) {
   if (!/^BEGIN:VCALENDAR\r?\n/i.test(source) || !/\nEND:VCALENDAR$/i.test(source)) {
     throw new Error("Google returned an invalid calendar feed.");
   }
-  return parseCalendar(source);
+  return parseCalendar(source, new Date(), ownerOf(address));
 }
 
 export class GoogleCalendarFeed {

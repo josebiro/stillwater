@@ -1,9 +1,10 @@
 import { readDaily, changeDaily } from "./daily.ts";
 import { GoogleCalendarFeed } from "./google-calendar.ts";
+import { installMeetingAlerts } from "./meeting-alert-window.ts";
 import { isHosted, listHostedModels, readHostedKey, saveHostedKey } from "./hosted-models.ts";
 import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, safeStorage, powerMonitor, powerSaveBlocker } from "electron";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { fixtureRoundTrip } from "./worker.ts";
 import { importMeeting, recognitionRuntime, refineMeeting, saveCapturedMeeting, setRecognitionModel, transcribe } from "./import-meeting.ts";
@@ -18,11 +19,25 @@ import { parseCalendar } from "./calendar.ts";
 import { installTray, recordPerformanceTrace, stillwaterIcon } from "./tray.ts";
 import { EnhancedNotesConflict, readEnhancedNotes, saveEnhancedNotes } from "./enhanced-notes.ts";
 import { findCalendarMeeting, listRecentActions, listVaultContexts, resolveMeetingLink, searchVault } from "./vault-search.ts";
+import { seedDemoVault } from "./demo-vault.ts";
 
 const normalLaunch = !process.argv.some((argument) => argument.startsWith("--check-"));
+// --screenshot <file.png>: open a made-up sample vault behind other windows, photograph My notes, save, exit.
+const screenshotFlag = process.argv.indexOf("--screenshot");
+const screenshotPath = screenshotFlag >= 0 ? process.argv[screenshotFlag + 1] : undefined;
+if (screenshotFlag >= 0 && !screenshotPath) {
+  console.error("Usage: --screenshot <file.png>");
+  process.exit(2);
+}
+if (screenshotPath) {
+  // A window behind others must keep drawing so the picture isn't blank.
+  app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
+  app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+  app.commandLine.appendSwitch("disable-renderer-backgrounding");
+}
 const trayRestartResult = process.argv.includes("--check-tray") ? process.env.STILLWATER_CHECK_RESTART_RESULT : undefined;
 if (trayRestartResult) app.setPath("userData", dirname(trayRestartResult));
-if ((normalLaunch || trayRestartResult) && app.isPackaged && !app.requestSingleInstanceLock()) app.exit(0);
+if ((normalLaunch || trayRestartResult) && !screenshotPath && app.isPackaged && !app.requestSingleInstanceLock()) app.exit(0);
 let pendingActivation = false;
 let activateWindow: (() => void) | undefined;
 app.on("second-instance", () => {
@@ -93,10 +108,10 @@ if (process.argv.includes("--check-recovery")) {
     checkCaptureStartup || checkCaptureModel || checkCaptureSpeech || process.argv.includes("--check-capture");
   const checkVaultUI = process.argv.includes("--check-vault-ui");
   const checkTray = process.argv.includes("--check-tray");
-  const settingsDirectory = checkTray
-    ? await mkdtemp(join(app.getPath("temp"), "stillwater-tray-check-"))
+  const settingsDirectory = checkTray || screenshotPath
+    ? await mkdtemp(join(app.getPath("temp"), screenshotPath ? "stillwater-screenshot-" : "stillwater-tray-check-"))
     : app.getPath("userData");
-  if (!checkCapture && !checkVaultUI) {
+  if (!checkCapture && !checkVaultUI && !screenshotPath) {
     setRecognitionModel(await readModelSetting(settingsDirectory).catch((error) => {
       console.error(error);
       return undefined;
@@ -104,24 +119,29 @@ if (process.argv.includes("--check-recovery")) {
   }
   let fixtureVault: string | undefined;
   const vaultSetting = join(settingsDirectory, "vault-path.txt");
-  let preferredVault = checkCapture || checkVaultUI ? "" : await readFile(vaultSetting, "utf8").catch(() => "");
+  let preferredVault = checkCapture || checkVaultUI || screenshotPath ? "" : await readFile(vaultSetting, "utf8").catch(() => "");
+  if (screenshotPath) {
+    fixtureVault = join(settingsDirectory, "sample-vault");
+    await mkdir(fixtureVault);
+    await seedDemoVault(fixtureVault);
+  }
   const spoolRoot = checkCapture
     ? await mkdtemp(join(app.getPath("temp"), "stillwater-spool-check-"))
     : join(settingsDirectory, "capture-spool");
   await inspectCaptureStorage(spoolRoot).catch((error) => console.error("Capture cleanup failed", error));
   const window = new BrowserWindow({
-    show: !checkCapture && !checkVaultUI && !checkTray,
+    show: !checkCapture && !checkVaultUI && !checkTray && !screenshotPath,
     icon: stillwaterIcon(),
     backgroundColor: "#110e15",
     autoHideMenuBar: true,
-    width: 1120,
-    height: 800,
+    width: screenshotPath ? 1380 : 1120,
+    height: screenshotPath ? 920 : 800,
     minWidth: 640,
     minHeight: 520,
     webPreferences: {
-      backgroundThrottling: !checkCaptureLoopback,
+      backgroundThrottling: !checkCaptureLoopback && !screenshotPath,
       preload: join(root, "desktop/preload.cjs"),
-      partition: checkCapture || checkVaultUI || checkTray ? `stillwater-check-${randomUUID()}` : undefined,
+      partition: checkCapture || checkVaultUI || checkTray || screenshotPath ? `stillwater-check-${randomUUID()}` : undefined,
     },
   });
   activateWindow = () => {
@@ -132,7 +152,7 @@ if (process.argv.includes("--check-recovery")) {
   if (pendingActivation) activateWindow();
   let active = false;
   const calendarPath = join(settingsDirectory, "calendar.ics");
-  let calendar = parseCalendar(checkCapture || checkVaultUI ? "" : await readFile(calendarPath, "utf8").catch(() => ""));
+  let calendar = parseCalendar(checkCapture || checkVaultUI || screenshotPath ? "" : await readFile(calendarPath, "utf8").catch(() => ""));
   if (checkCapture) {
     const start = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
     calendar = parseCalendar(["BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:capture-fixture",
@@ -146,11 +166,35 @@ if (process.argv.includes("--check-recovery")) {
     },
     open:async bytes => (await safeStorage.decryptStringAsync(bytes)).result,
   });
-  if (!checkVaultUI && !checkCapture && !checkTray) await googleCalendar.load();
+  if (!checkVaultUI && !checkCapture && !checkTray && !screenshotPath) await googleCalendar.load();
   const agenda = () => googleCalendar.agenda(calendar);
+  // Before-meeting alerts read the same agenda the Home page shows.
+  const bringForward = () => {
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+  };
+  const alerts = checkCapture || checkVaultUI || checkTray ? undefined : await installMeetingAlerts({
+    root, settingsDirectory, window,
+    events: () => screenshotPath ? [] : agenda().events,
+    start: (event) => { bringForward(); window.webContents.send("alert:start", event); },
+    openSettings: () => { bringForward(); window.webContents.send("tray:navigate", "settings"); },
+  });
+  ipcMain.handle("alerts:setting", async (event, value) => {
+    if (event.senderFrame !== window.webContents.mainFrame || !alerts) throw Error("Alert settings unavailable.");
+    if (typeof value === "boolean") await alerts.setEnabled(value);
+    return alerts.enabled();
+  });
+  ipcMain.handle("alerts:test", async (event) => {
+    if (event.senderFrame !== window.webContents.mainFrame || !alerts) throw Error("Alert settings unavailable.");
+    const start = new Date(Date.now() + 60000);
+    await alerts.preview({ id: "stillwater-test-alert", title: "Test meeting", allDay: false,
+      start: start.toISOString(), end: new Date(start.getTime() + 30 * 60000).toISOString() });
+  });
   ipcMain.handle("calendar:google",async (event,action,address) => {
     if (event.senderFrame !== window.webContents.mainFrame || !["connect","sync","disconnect"].includes(action)) throw Error("Calendar settings unavailable.");
     await googleCalendar.change(action,address);
+    alerts?.refresh();
     return agenda();
   });
   function linkedEvent(id: unknown, start: unknown) {
@@ -180,6 +224,7 @@ if (process.argv.includes("--check-recovery")) {
         await writeFile(temporary, source, { flag: "wx", flush: true });
         await rename(temporary, calendarPath);
         calendar = next;
+        alerts?.refresh();
         return agenda();
       } finally {
         await rm(temporary, { force: true });
@@ -835,7 +880,53 @@ if (process.argv.includes("--check-recovery")) {
   if (checkVaultUI) window.webContents.on("console-message", details => {
     if (details.level === "error") console.error(details.message);
   });
+  if (screenshotPath) {
+    // Draw without taking focus, behind other windows on Windows, and keep drawing while covered.
+    window.showInactive();
+    if (process.platform === "win32") window.blur();
+  }
   await window.loadFile(join(root, "desktop/index.html"));
+  if (screenshotPath) {
+    await window.webContents.executeJavaScript(`
+      (async () => {
+        for (let i = 0; i < 200 && !(window.stillwaterJournal?.data.folders.length); i++) await new Promise(r => setTimeout(r, 50));
+        window.stillwaterFolders.openMyNotes();
+        // STILLWATER_SCREENSHOT_VIEW=folder|picker|suggest|views|alert photographs another state for design review.
+        const view = ${JSON.stringify(process.env.STILLWATER_SCREENSHOT_VIEW ?? "")};
+        const journal = window.stillwaterJournal.data;
+        if (view === "folder") window.stillwaterFolders.openFolder(journal.folders.find(f => f.title === "Launches").id);
+        if (view === "picker") {
+          const note = journal.meetings.find(m => m.title.startsWith("Pricing"));
+          await openSavedMeeting(note.path, "", "journal");
+          await new Promise(r => setTimeout(r, 300));
+          document.querySelector("#saved-folders .add").click();
+          return;
+        }
+        if (view === "suggest") {
+          const note = journal.meetings.filter(m => m.title === "Weekly design review").sort((a, b) => b.date.localeCompare(a.date))[0];
+          await openSavedMeeting(note.path, "", "journal");
+          await new Promise(r => setTimeout(r, 300));
+        }
+        if (view === "views") { document.getElementById("sidebar-new-label-view").click(); return; }
+        document.activeElement?.blur();
+      })()
+    `);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    window.webContents.invalidate();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    // The alert view photographs the before-meeting card instead of the main window.
+    const start = new Date(Date.now() + 60000);
+    const card = process.env.STILLWATER_SCREENSHOT_VIEW === "alert" ? await alerts?.preview({
+      id: "demo-alert", title: "Weekly design review", allDay: false, start: start.toISOString(),
+      end: new Date(start.getTime() + 30 * 60000).toISOString(), attendees: ["Avery Kim"],
+      join: { url: "https://meet.google.com/demo", service: "Google Meet" } }) : undefined;
+    if (card) await new Promise((resolve) => setTimeout(resolve, 600));
+    const image = await (card ?? window).webContents.capturePage(undefined, { stayHidden: true });
+    await writeFile(screenshotPath, image.toPNG());
+    console.log("Saved " + screenshotPath);
+    app.exit(0);
+    await new Promise(() => undefined);
+  }
   const tray = (!checkCapture || checkCaptureExit) && !checkVaultUI && process.platform === "win32"
     ? installTray(window, async () => {
         if (active || !spool) return !active;

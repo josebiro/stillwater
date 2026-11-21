@@ -70,7 +70,13 @@ libraryTools.addEventListener("keydown", event => {
     libraryTools.querySelector("summary").focus();
   }
 });
-document.querySelector("#calendar-link").addEventListener("click", () => document.querySelector("#agenda-previous").focus());
+document.querySelector("#calendar-link").addEventListener("click", () => {
+  if (workspaceView !== "home") homeButton.click();
+  requestAnimationFrame(() => {
+    document.querySelector("#agenda").scrollIntoView({ block: "start" });
+    document.querySelector("#agenda-previous").focus();
+  });
+});
 document.querySelector("#journal-create").addEventListener("click", () => newNoteButton.click());
 const settings = document.querySelector("#speech-settings");
 settings.addEventListener("keydown", (event) => {
@@ -83,8 +89,8 @@ document.addEventListener("pointerdown", event => {
   if (!libraryTools.contains(event.target)) libraryTools.open = false;
   if (settings.open && !settings.contains(event.target)) settings.open = false;
 });
-const homeControls = ["#journal-mast", "#feature", "#journal-columns", "#calendar-link", "#agenda", "#vault-search", "#meeting-results", "#vault-question", "#context-results",
-  "#library-tools"].map((selector) => document.querySelector(selector));
+const homeControls = ["#journal-mast", "#feature", "#journal-columns", "#agenda", "#vault-search", "#meeting-results", "#vault-question", "#context-results"]
+  .map((selector) => document.querySelector(selector));
 let workspaceView = "home";
 function showWorkspace(view, message = "") {
   const changed = workspaceView !== view;
@@ -98,6 +104,7 @@ function showWorkspace(view, message = "") {
     document.querySelector("#meeting-results").hidden = true;
   }
   document.querySelector("#saved-meeting").hidden = view !== "meeting";
+  document.querySelector("#folder-view").hidden = view !== "folder";
   if (view !== "home") settings.open = false;
   homeButton.setAttribute("aria-current", view === "home" ? "page" : "false");
   newNoteButton.setAttribute("aria-current", editor ? "page" : "false");
@@ -210,6 +217,39 @@ async function openEvent(event, open) {
   showWorkspace("editor");
 }
 
+// A before-meeting alert's button: open (or start) the note for that event and begin recording.
+// An event that already has a saved note just opens it.
+window.stillwater.onMeetingAlertStart(async (event) => {
+  const start = document.querySelector("#capture-start");
+  if (start.disabled) {
+    showWorkspace("editor");
+    status.textContent = "Finish the current recording before starting notes for " + event.title + ".";
+    return;
+  }
+  await openEvent(event, { disabled: false });
+  if (form.dataset.calendarId === event.id && form.dataset.calendarStart === event.start && !start.disabled) start.click();
+});
+// No alert for a meeting that is already being recorded.
+window.stillwater.onMeetingAlertAsk((id, start) => form.dataset.calendarId === id && form.dataset.calendarStart === start &&
+  document.querySelector("#capture-start").disabled);
+const alertsEnabled = document.querySelector("#alerts-enabled");
+const alertsStatus = document.querySelector("#alerts-status");
+window.stillwater.meetingAlerts().then((enabled) => { alertsEnabled.checked = enabled; }).catch(() => {
+  alertsEnabled.disabled = document.querySelector("#alerts-test").disabled = true;
+});
+alertsEnabled.addEventListener("change", async () => {
+  try {
+    alertsEnabled.checked = await window.stillwater.meetingAlerts(alertsEnabled.checked);
+    alertsStatus.textContent = alertsEnabled.checked ? "Alerts are on for events with other people or a call link." : "Alerts are off.";
+  } catch (error) { alertsStatus.textContent = error.message; }
+});
+document.querySelector("#alerts-test").addEventListener("click", async () => {
+  try {
+    await window.stillwater.testMeetingAlert();
+    alertsStatus.textContent = "A test alert is showing at the top right of your screen.";
+  } catch (error) { alertsStatus.textContent = error.message; }
+});
+
 let featuredEvent;
 function updateFeature(now) {
   featuredEvent = calendarData.events.find(event => new Date(event.end || event.start) > now ||
@@ -314,7 +354,7 @@ function showCalendar(data) {
   googleDisconnect.hidden = !data.connected && !data.unreadable;
   googleConnect.textContent = data.connected ? "Replace calendar" : "Connect calendar";
   googleStatus.textContent = data.unreadable ? "Could not unlock the saved calendar. Reconnect or disconnect it." :
-    data.connected ? "Last synced " + new Date(data.syncedAt).toLocaleString() + ". Refreshes every 15 minutes." : "";
+    data.connected ? "Last synced " + new Date(data.syncedAt).toLocaleString() + ". Refreshes every 5 minutes." : "";
   renderAgenda();
 }
 
@@ -345,7 +385,7 @@ async function updateGoogle(action) {
 function refreshCalendarIfDue() {
   if (renderedAgendaDay !== new Date().toDateString()) renderAgenda();
   else updateFeature(new Date());
-  if (calendarData.connected && Date.now() - Math.max(lastGoogleAttempt, calendarData.syncedAt) >= 15 * 60000) {
+  if (calendarData.connected && Date.now() - Math.max(lastGoogleAttempt, calendarData.syncedAt) >= 5 * 60000) {
     void updateGoogle("sync");
   }
 }
